@@ -88,12 +88,18 @@ export class AppendingInputOutput {
             a = D.createElement("a");
         strMimeType = strMimeType || "application/octet-stream";
 
+// OLD VERSION: CHANGED BECAUSE OF Error TS2339: Property 'msSaveBlob' does not exist on type 'Navigator'.
+        // if (navigator.msSaveBlob) { // IE10
+        //     return navigator.msSaveBlob(new Blob([strData], {type: strMimeType}), strFileName);
+        // } /* end if(navigator.msSaveBlob) */
 
-        if (navigator.msSaveBlob) { // IE10
-            return navigator.msSaveBlob(new Blob([strData], {type: strMimeType}), strFileName);
-        } /* end if(navigator.msSaveBlob) */
-
-
+        if ((window.navigator as any).msSaveBlob) {
+            (window.navigator as any).msSaveBlob(new Blob([strData], {type: strMimeType}), strFileName);
+          } else {
+            // fallback, e.g., createObjectURL and anchor click
+            console.log("this is not working");
+          }
+          
         if ('download' in a) { //html5 A[download]
             a.href = "data:" + strMimeType + "," + encodeURIComponent(strData);
             a.setAttribute("download", strFileName);
