@@ -662,10 +662,11 @@ g.column rect {
 #main-part .basic-button {
   font-family: "Roboto", "Helvetica", "Arial", sans-serif;
   margin-top: 25px;
-  height: 34px;
+  /*height: 34px;*/
+  height: 50px;
   margin-right: 0;
   width: 100%;
-  display: block;
+  display: inline-block;
   color: rgba(0, 0, 0, 0.5);
   border: 1px solid black;
   background: rgba(255,255,255,.1);
