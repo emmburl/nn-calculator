@@ -2540,7 +2540,7 @@ function change_xy_point(mod_input, index_point) {
         return;
       }
       // sanity check
-      if (INVERSEINPUTS[inputName].label != 'X_1' || INVERSEINPUTS[inputName].label != 'X_2') {
+      if (INVERSEINPUTS[inputName].label != 'X_1' && INVERSEINPUTS[inputName].label != 'X_2') {
         console.log('ERROR: there is a problem with encoding INVERSEINPUTS');
       }
     }
