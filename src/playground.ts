@@ -2019,6 +2019,72 @@ function getLoss(network: nn.Node[][], dataPoints: Example2D[]): number {
   return loss / dataPoints.length;
 }
 
+export function quantizeBiases(network: nn.Node[][], targetBits){
+  let data: number[] = []; 
+  // adds all biases to an array
+  for (let layerIdx = 1; layerIdx < network.length; layerIdx++) { // check logic of layer idx starts at 1
+    let currentLayer = network[layerIdx];
+    for (let i = 0; i < currentLayer.length; i++) {
+      let node = currentLayer[i];
+      data.push(node.bias)
+    }
+  }
+
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new Error('Data must be a non-empty array');
+  }
+
+  const R = Math.max(...data.map(x => Math.abs(x))); // max absolute value of weight array
+  const n = Math.pow(2, targetBits); // maximum number able to be represented by target bits
+  const M = R; // symmetrical bound
+
+  // Calculate scale (zero-point is 0 for symmetrical quantization)
+  const s = (n - 1) / R;
+  const z = 0;
+
+  // Apply quantization
+  const quantizedData = data.map(x => {
+    const clamped = Math.max(Math.min(x, M), -M);
+    return Math.round(s * clamped + z) / s;
+  });
+
+  // CHECK Update the actual biases with quantized values
+  let biasIndex = 0;
+  for (let layerIdx = 1; layerIdx < network.length; layerIdx++) {
+    let currentLayer = network[layerIdx];
+    for (let i = 0; i < currentLayer.length; i++) {
+      let node = currentLayer[i];
+      node.bias = quantizedData[biasIndex]; 
+      biasIndex++; 
+  }
+}
+  return quantizedData;
+}
+// Performs inference after quantization 
+export function quantizationInference(network: nn.Node[][]) {
+  // RUN with this as an argument for data
+  // let weights: number[];
+  //weights = getOutputWeights(network)
+  quantizeBiases(network, 8) // quantizes all the model's biases based on an inputted precision
+  for (let layerIdx = 1; layerIdx < network.length; layerIdx++) {
+    let currentLayer = network[layerIdx];
+    for (let i = 0; i < currentLayer.length; i++) {
+      let node = currentLayer[i];
+      node.quantizeWeights(8) // quantizes all the model's weights based on an inputted precision
+    }
+  }
+  
+  // Computes loss after inference
+  lossTrain = getLoss(network, trainData);
+  lossTest = getLoss(network, testData);
+
+  let mse_result: string;
+  mse_result = '&nbsp; MSE Train loss: ' + (Math.round(lossTrain * 1000) / 1000).toString() + ', ';
+  mse_result += ' MSE Test loss: ' + (Math.round(lossTest * 1000) / 1000).toString() + '<BR>';
+  let element = document.getElementById("accuracyDiv");
+  element.innerHTML = mse_result;
+  }
+
 function updateUI(firstStep = false) {
   // Update the links visually.
   updateWeightsUI(network, d3.select("g.core"));
@@ -2123,6 +2189,7 @@ export function getOutputWeights(network: nn.Node[][]): number[] {
   }
   return weights;
 }
+
 /** Added */
 // set network weights
 export function setOutputWeights(network: nn.Node[][], weights: number[]): boolean {
@@ -2621,6 +2688,7 @@ function simulationStarted() {
   });
   parametersChanged = false;
 }
+
 
 drawDatasetThumbnails();
 initTutorial();

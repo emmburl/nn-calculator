@@ -72,6 +72,42 @@ export class Node {
     this.output = this.activation.output(this.totalInput);
     return this.output;
   }
+
+  // Quantizes weights using Max-Abs symmetric quantization method
+  quantizeWeights(targetBits: number): number[] { 
+    let data: number[] = []; 
+    // Adds all weights to data array
+    for (let j = 0; j < this.inputLinks.length; j++) {
+      let link = this.inputLinks[j];
+      data.push(link.weight)
+    }
+
+    if (!Array.isArray(data) || data.length === 0) {
+      throw new Error('Data must be a non-empty array');
+    }
+  
+    const R = Math.max(...data.map(x => Math.abs(x))); // max absolute value of weight array
+    const n = Math.pow(2, targetBits); // maximum number able to be represented by target bits
+    const M = R; // symmetrical bound
+
+    // Calculate scale (zero-point is 0 for symmetrical quantization)
+    const s = (n - 1) / R;
+    const z = 0;
+
+    // Apply quantization
+    const quantizedData = data.map(x => {
+      const clamped = Math.max(Math.min(x, M), -M);
+      return Math.round(s * clamped + z) / s;
+    });
+
+    // Update the actual link weights with quantized values
+    for (let j = 0; j < this.inputLinks.length; j++) {
+      this.inputLinks[j].weight = quantizedData[j];
+    }
+
+    return quantizedData;
+  } 
+
   /////////////////////////////////
   /** Recomputes the node's output and returns it. */
   updateTotalInput(): number {
