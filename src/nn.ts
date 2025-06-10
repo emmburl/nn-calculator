@@ -28,6 +28,7 @@ export class Node {
   /** List of input links. */
   inputLinks: Link[] = [];
   bias = 0.1;
+  fp64Bias = 0; // stores original fp64 bias before quantization
   /** List of output links. */
   outputs: Link[] = [];
   totalInput: number;
@@ -76,10 +77,10 @@ export class Node {
   // Quantizes weights using Max-Abs symmetric quantization method
   quantizeWeights(targetBits: number): number[] { 
     let data: number[] = []; 
-    // Adds all weights to data array
+    // Adds all FP64 weights to data array
     for (let j = 0; j < this.inputLinks.length; j++) {
       let link = this.inputLinks[j];
-      data.push(link.weight)
+      data.push(link.fp64Weight)
     }
 
     if (!Array.isArray(data) || data.length === 0) {
@@ -351,6 +352,7 @@ export class Link {
   source: Node;
   dest: Node;
   weight = Math.random() - 0.5;
+  fp64Weight = 0; // stores original fp64 weight before quantization
   isDead = false;
   /** Error derivative with respect to this weight. */
   errorDer = 0;

@@ -2023,11 +2023,11 @@ function getLoss(network: nn.Node[][], dataPoints: Example2D[]): number {
 export function quantizeBiases(network: nn.Node[][], targetBits){
   let data: number[] = []; 
   // adds all biases to an array
-  for (let layerIdx = 1; layerIdx < network.length; layerIdx++) { // check logic of layer idx starts at 1
+  for (let layerIdx = 1; layerIdx < network.length; layerIdx++) {
     let currentLayer = network[layerIdx];
     for (let i = 0; i < currentLayer.length; i++) {
       let node = currentLayer[i];
-      data.push(node.bias)
+      data.push(node.fp64Bias)
     }
   }
 
@@ -2080,7 +2080,8 @@ export function quantizationInference(network: nn.Node[][], targetBits) {
   lossTest = getLoss(network, testData);
 
   let mse_result: string;
-  mse_result = '&nbsp; MSE Train loss: ' + (Math.round(lossTrain * 1000) / 1000).toString() + ', ';
+  mse_result = '&nbsp; Precision: FP' + targetBits + '<BR>';
+  mse_result += '&nbsp; MSE Train loss: ' + (Math.round(lossTrain * 1000) / 1000).toString() + ', ';
   mse_result += ' MSE Test loss: ' + (Math.round(lossTest * 1000) / 1000).toString() + '<BR>';
   let element = document.getElementById("accuracyDiv");
   element.innerHTML = mse_result;
@@ -2184,6 +2185,27 @@ function oneStep(): void {
   //console.log("DEBUG: lossTrain=", lossTrain, " lossTest=", lossTest);
 
   updateUI();
+
+  // Storing original FP64 weights for reference after training so they are still accessible after quantization
+  for (let layerIdx = 1; layerIdx < network.length; layerIdx++) {
+    let currentLayer = network[layerIdx];
+    for (let i = 0; i < currentLayer.length; i++) {
+      let node = currentLayer[i];
+      for (let j = 0; j < node.inputLinks.length; j++) {
+        let link = node.inputLinks[j];
+        link.fp64Weight = link.weight
+      }
+    }
+  }
+
+  // Storing original FP64 biases
+  for (let layerIdx = 1; layerIdx < network.length; layerIdx++) { 
+    let currentLayer = network[layerIdx];
+    for (let i = 0; i < currentLayer.length; i++) {
+      let node = currentLayer[i];
+      node.fp64Bias = node.bias
+    }
+  }
 }
 
 export function getOutputWeights(network: nn.Node[][]): number[] {
