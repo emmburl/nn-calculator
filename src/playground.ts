@@ -2019,6 +2019,7 @@ function getLoss(network: nn.Node[][], dataPoints: Example2D[]): number {
   return loss / dataPoints.length;
 }
 
+// Quantizes biases of network
 export function quantizeBiases(network: nn.Node[][], targetBits){
   let data: number[] = []; 
   // adds all biases to an array
@@ -2060,6 +2061,7 @@ export function quantizeBiases(network: nn.Node[][], targetBits){
 }
   return quantizedData;
 }
+
 // Performs inference after quantization 
 export function quantizationInference(network: nn.Node[][], targetBits) {
   // Quantizes all the model's biases based on an inputted precision
@@ -2084,11 +2086,14 @@ export function quantizationInference(network: nn.Node[][], targetBits) {
   element.innerHTML = mse_result;
   }
 
+// When dropdown menu is changed , feed selectedValue as targetBits number for quantization
 d3.select("#quantize-select").on("change", function () {
   const selectedValue = +this.value; // convert string to number
   console.log("Target bits:", selectedValue);
-
-  quantizationInference(network, selectedValue);
+  
+  if (selectedValue > 0) { // set the "select precision" option to a value of zero which should not be quantized
+    quantizationInference(network, selectedValue);
+  }
 });
 
 function updateUI(firstStep = false) {

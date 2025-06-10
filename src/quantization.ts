@@ -1,6 +1,8 @@
+/*
 import { getNumberParts } from './checksum'; // imports function from checksum.ts that converts a number to its IEEE 754 representation
 
 class FloatingPointQuantizer {
+*/
 /*
     constructor() {
       // Define precision limits for different floating point formats
@@ -23,6 +25,7 @@ class FloatingPointQuantizer {
       };
     }
 */ 
+/*
     // Clamp function from Equation 13
     clamp(x, alpha, beta) {
       return Math.max(Math.min(x, beta), alpha);
@@ -322,7 +325,7 @@ function directFP32Conversion(number: number): number {
     return float32[0];
 }
 console.log(directFP32Conversion(3.14159));
-
+*/
 
 
 
