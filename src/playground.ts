@@ -2061,16 +2061,15 @@ export function quantizeBiases(network: nn.Node[][], targetBits){
   return quantizedData;
 }
 // Performs inference after quantization 
-export function quantizationInference(network: nn.Node[][]) {
-  // RUN with this as an argument for data
-  // let weights: number[];
-  //weights = getOutputWeights(network)
-  quantizeBiases(network, 8) // quantizes all the model's biases based on an inputted precision
+export function quantizationInference(network: nn.Node[][], targetBits) {
+  // Quantizes all the model's biases based on an inputted precision
+  quantizeBiases(network, targetBits) 
+  // Quantizes all the model's weights based on an inputted precision
   for (let layerIdx = 1; layerIdx < network.length; layerIdx++) {
     let currentLayer = network[layerIdx];
     for (let i = 0; i < currentLayer.length; i++) {
       let node = currentLayer[i];
-      node.quantizeWeights(8) // quantizes all the model's weights based on an inputted precision
+      node.quantizeWeights(targetBits) 
     }
   }
   
@@ -2084,6 +2083,13 @@ export function quantizationInference(network: nn.Node[][]) {
   let element = document.getElementById("accuracyDiv");
   element.innerHTML = mse_result;
   }
+
+d3.select("#quantize-select").on("change", function () {
+  const selectedValue = +this.value; // convert string to number
+  console.log("Target bits:", selectedValue);
+
+  quantizationInference(network, selectedValue);
+});
 
 function updateUI(firstStep = false) {
   // Update the links visually.

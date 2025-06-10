@@ -269,6 +269,20 @@ limitations under the License.
             <input class="mdl-slider mdl-js-slider" type="range" id="trojan" min="0" max="10" step="1">
           </p>
         </div>
+        <!-- Dropdown menu for quantization button-->
+        <div class="ui-quant">
+          <label for="quantize-select">
+            Quantize to:
+            <select id="quantize-select" class="quant-dropdown">
+              <option value="8">8</option>
+              <option value="16">16</option>
+              <option value="32">32</option>
+              <option value="64">64</option>
+            </select>
+          </label>
+        </div>
+        
+        
         <!--
        <div class="ui-percBackdoor">
          <label for="percBackdoor">Backdoor [%]:&nbsp;&nbsp;<span class="value">XX</span></label>
