@@ -2019,6 +2019,18 @@ function getLoss(network: nn.Node[][], dataPoints: Example2D[]): number {
   return loss / dataPoints.length;
 }
 
+function predict(network: nn.Node[][], dataPoints: Example2D[]): number[] {
+  let predictions: number[] = [];
+  for (let i = 0; i < dataPoints.length; i++) {
+    let dataPoint = dataPoints[i];
+    let input = constructInput(dataPoint.x, dataPoint.y);
+    let output = nn.forwardProp(network, input);
+    output = output > 0 ? 1 : -1;
+    predictions.push(output)
+  }
+  return predictions
+}
+
 // Quantizes biases of network
 export function quantizeBiases(network: nn.Node[][], targetBits){
   let data: number[] = []; 
@@ -2075,6 +2087,28 @@ export function quantizationInference(network: nn.Node[][], targetBits) {
     }
   }
   
+  // Computes accuracy on train data and test data
+  let trainCorrect = 0;
+  let trainPredictions = predict(network, trainData)
+  for (let i = 0; i < trainData.length; i++) {
+    let dataPoint = trainData[i];
+    if (trainPredictions[i] == dataPoint.label){
+      trainCorrect++;
+    }
+  }
+
+  let testCorrect = 0;
+  let testPredictions = predict(network, testData)
+  for (let i = 0; i < testData.length; i++) {
+    let dataPoint = testData[i];
+    if (testPredictions[i] == dataPoint.label){ 
+      testCorrect++;
+    }
+  }
+
+  let trainAccuracy = (trainCorrect / trainData.length) * 100;
+  let testAccuracy = (testCorrect / testData.length) * 100;
+
   // Computes loss after inference
   lossTrain = getLoss(network, trainData);
   lossTest = getLoss(network, testData);
@@ -2083,9 +2117,11 @@ export function quantizationInference(network: nn.Node[][], targetBits) {
   mse_result = '&nbsp; Precision: FP' + targetBits + '<BR>';
   mse_result += '&nbsp; MSE Train loss: ' + (Math.round(lossTrain * 1000) / 1000).toString() + ', ';
   mse_result += ' MSE Test loss: ' + (Math.round(lossTest * 1000) / 1000).toString() + '<BR>';
+  mse_result += '&nbsp; Train Accuracy: ' + trainAccuracy.toFixed(2) + '%, ';
+  mse_result += ' Test Accuracy: ' + testAccuracy.toFixed(2) + '%<BR>';
   let element = document.getElementById("accuracyDiv");
   element.innerHTML = mse_result;
-  }
+}
 
 // When dropdown menu is changed , feed selectedValue as targetBits number for quantization
 d3.select("#quantize-select").on("change", function () {
