@@ -2031,7 +2031,7 @@ function predict(network: nn.Node[][], dataPoints: Example2D[]): number[] {
   return predictions
 }
 
-// Quantizes biases of network
+// Quantizes biases of network and calculates error
 export function quantizeBiases(network: nn.Node[][], targetBits){
   let data: number[] = []; 
   // adds all biases to an array
@@ -2061,29 +2061,34 @@ export function quantizeBiases(network: nn.Node[][], targetBits){
     return Math.round(s * clamped + z) / s;
   });
 
-  // CHECK Update the actual biases with quantized values
+  // Updates the actual biases with quantized values and calculates the error
   let biasIndex = 0;
+  let allErrors: number[] = [];
   for (let layerIdx = 1; layerIdx < network.length; layerIdx++) {
     let currentLayer = network[layerIdx];
     for (let i = 0; i < currentLayer.length; i++) {
       let node = currentLayer[i];
-      node.bias = quantizedData[biasIndex]; 
+      node.bias = quantizedData[biasIndex]; // updates bias
+      allErrors.push(node.fp64Bias - node.bias); // calculates error
       biasIndex++; 
+    }
   }
-}
-  return quantizedData;
+  return { biasQuantizedData: quantizedData, biasErrors: allErrors };
 }
 
-// Performs inference after quantization 
+// Performs inference after quantization and computes average error, accuracy, loss 
 export function quantizationInference(network: nn.Node[][], targetBits) {
   // Quantizes all the model's biases based on an inputted precision
-  quantizeBiases(network, targetBits) 
-  // Quantizes all the model's weights based on an inputted precision
+  let { biasQuantizedData, biasErrors } = quantizeBiases(network, targetBits);
+  
+  // Quantizes all the model's weights based on an inputted precision and collects errors
+  let allWeightErrors: number[] = [];
   for (let layerIdx = 1; layerIdx < network.length; layerIdx++) {
     let currentLayer = network[layerIdx];
     for (let i = 0; i < currentLayer.length; i++) {
       let node = currentLayer[i];
-      node.quantizeWeights(targetBits) 
+      let { weightQuantizedData, weightErrors } = node.quantizeWeights(targetBits);
+      allWeightErrors.push(...weightErrors);
     }
   }
   
@@ -2109,16 +2114,22 @@ export function quantizationInference(network: nn.Node[][], targetBits) {
   let trainAccuracy = (trainCorrect / trainData.length) * 100;
   let testAccuracy = (testCorrect / testData.length) * 100;
 
-  // Computes loss after inference
+  // Computes loss after inference on train and test data
   lossTrain = getLoss(network, trainData);
   lossTest = getLoss(network, testData);
 
+  // Calculates mean absolute error of quantization for biases and weights
+  let meanAbsErrorBiases = biasErrors.reduce((sum, error) => sum + Math.abs(error), 0) / biasErrors.length;
+  let meanAbsErrorWeights = allWeightErrors.reduce((sum, error) => sum + Math.abs(error), 0) / allWeightErrors.length;
+ // UI display
   let mse_result: string;
   mse_result = '&nbsp; Precision: FP' + targetBits + '<BR>';
   mse_result += '&nbsp; MSE Train loss: ' + (Math.round(lossTrain * 1000) / 1000).toString() + ', ';
   mse_result += ' MSE Test loss: ' + (Math.round(lossTest * 1000) / 1000).toString() + '<BR>';
   mse_result += '&nbsp; Train Accuracy: ' + trainAccuracy.toFixed(2) + '%, ';
   mse_result += ' Test Accuracy: ' + testAccuracy.toFixed(2) + '%<BR>';
+  mse_result += '&nbsp; Mean Absolute Quantization Error (Biases): ' + meanAbsErrorBiases.toFixed(6) + '<BR>';
+  mse_result += '&nbsp; Mean Absolute Quantization Error (Weights): ' + meanAbsErrorWeights.toFixed(6) + '<BR>';
   let element = document.getElementById("accuracyDiv");
   element.innerHTML = mse_result;
 }

@@ -74,8 +74,8 @@ export class Node {
     return this.output;
   }
 
-  // Quantizes weights using Max-Abs symmetric quantization method
-  quantizeWeights(targetBits: number): number[] { 
+  // Quantizes weights using Max-Abs symmetric quantization method and calculates error
+  quantizeWeights(targetBits: number): { weightQuantizedData: number[], weightErrors: number[] } { 
     let data: number[] = []; 
     // Adds all FP64 weights to data array
     for (let j = 0; j < this.inputLinks.length; j++) {
@@ -86,7 +86,7 @@ export class Node {
     if (!Array.isArray(data) || data.length === 0) {
       throw new Error('Data must be a non-empty array');
     }
-  
+
     const R = Math.max(...data.map(x => Math.abs(x))); // max absolute value of weight array
     const n = Math.pow(2, targetBits); // maximum number able to be represented by target bits
     const M = R; // symmetrical bound
@@ -101,12 +101,14 @@ export class Node {
       return Math.round(s * clamped + z) / s;
     });
 
-    // Update the actual link weights with quantized values
+    let allErrors: number[] = [];
+    // Updates the actual link weights with quantized values and calculates errors
     for (let j = 0; j < this.inputLinks.length; j++) {
-      this.inputLinks[j].weight = quantizedData[j];
+      this.inputLinks[j].weight = quantizedData[j]; // updates link weight
+      allErrors.push(this.inputLinks[j].fp64Weight - this.inputLinks[j].weight); // computes error
     }
 
-    return quantizedData;
+    return { weightQuantizedData: quantizedData, weightErrors: allErrors };
   } 
 
   /////////////////////////////////
