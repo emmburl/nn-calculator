@@ -17,6 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 import {simpleChecksum} from "./checksum";
+import { fixed } from "./playground"; // determines if quantization is performed with a fixed range
 
 /**
  * A node in a neural network. Each node has a state
@@ -87,7 +88,14 @@ export class Node {
       throw new Error('Data must be a non-empty array');
     }
 
-    const R = Math.max(...data.map(x => Math.abs(x))); // max absolute value of weight array
+    let R: number;
+    if (fixed == true){
+      R = 25; // fixed max value
+    }
+    else{
+      R = Math.max(...data.map(x => Math.abs(x))); // max absolute value of weight array
+    }
+    
     const n = Math.pow(2, targetBits); // maximum number able to be represented by target bits
     const M = R; // symmetrical bound
 

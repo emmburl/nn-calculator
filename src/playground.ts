@@ -2031,6 +2031,8 @@ function predict(network: nn.Node[][], dataPoints: Example2D[]): number[] {
   return predictions
 }
 
+// Global variable determining if range is fixed
+export let fixed = true;
 // Quantizes biases of network and calculates error
 export function quantizeBiases(network: nn.Node[][], targetBits){
   let data: number[] = []; 
@@ -2046,8 +2048,14 @@ export function quantizeBiases(network: nn.Node[][], targetBits){
   if (!Array.isArray(data) || data.length === 0) {
     throw new Error('Data must be a non-empty array');
   }
-
-  const R = Math.max(...data.map(x => Math.abs(x))); // max absolute value of weight array
+  let R: number;
+  if (fixed == true){
+    R = 25; // fixed max value
+  }
+  else{
+    R = Math.max(...data.map(x => Math.abs(x))); // max absolute value of weight array
+  }
+  
   const n = Math.pow(2, targetBits); // maximum number able to be represented by target bits
   const M = R; // symmetrical bound
 
