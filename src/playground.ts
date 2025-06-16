@@ -2013,18 +2013,19 @@ function getLoss(network: nn.Node[][], dataPoints: Example2D[]): number {
   for (let i = 0; i < dataPoints.length; i++) {
     let dataPoint = dataPoints[i];
     let input = constructInput(dataPoint.x, dataPoint.y);
-    let output = nn.forwardProp(network, input);
+    let output = nn.forwardProp(network, input, true); // Pass true to enable quantization of total input/sum and activations
     loss += nn.Errors.SQUARE.error(output, dataPoint.label);
   }
   return loss / dataPoints.length;
 }
 
+// Returns array of predictions (1 or -1) for each input in a data set
 function predict(network: nn.Node[][], dataPoints: Example2D[]): number[] {
   let predictions: number[] = [];
   for (let i = 0; i < dataPoints.length; i++) {
     let dataPoint = dataPoints[i];
     let input = constructInput(dataPoint.x, dataPoint.y);
-    let output = nn.forwardProp(network, input);
+    let output = nn.forwardProp(network, input, true); // Pass true to enable quantization
     output = output > 0 ? 1 : -1;
     predictions.push(output)
   }
@@ -2033,6 +2034,8 @@ function predict(network: nn.Node[][], dataPoints: Example2D[]): number[] {
 
 // Global variable determining if range is fixed
 export let fixed = true;
+//Global variable determining target bits to quantize to
+export let targetBits = 64;
 // Quantizes biases of network and calculates error
 export function quantizeBiases(network: nn.Node[][], targetBits){
   let data: number[] = []; 
@@ -2050,7 +2053,7 @@ export function quantizeBiases(network: nn.Node[][], targetBits){
   }
   let R: number;
   if (fixed == true){
-    R = 25; // fixed max value
+    R = 5; // fixed max value
   }
   else{
     R = Math.max(...data.map(x => Math.abs(x))); // max absolute value of weight array
@@ -2148,7 +2151,8 @@ d3.select("#quantize-select").on("change", function () {
   console.log("Target bits:", selectedValue);
   
   if (selectedValue > 0) { // set the "select precision" option to a value of zero which should not be quantized
-    quantizationInference(network, selectedValue);
+    targetBits = selectedValue
+    quantizationInference(network, targetBits);
   }
 });
 

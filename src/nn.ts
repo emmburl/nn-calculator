@@ -18,6 +18,7 @@ limitations under the License.
 ==============================================================================*/
 import {simpleChecksum} from "./checksum";
 import { fixed } from "./playground"; // determines if quantization is performed with a fixed range
+import { targetBits } from "./playground"; 
 
 /**
  * A node in a neural network. Each node has a state
@@ -64,14 +65,48 @@ export class Node {
   }
 
   /** Recomputes the node's output and returns it. */
-  updateOutput(): number {
+  updateOutput(shouldQuantize: boolean = false): number {
     // Stores total input into the node.
     this.totalInput = this.bias;
     for (let j = 0; j < this.inputLinks.length; j++) {
       let link = this.inputLinks[j];
       this.totalInput += link.weight * link.source.output;
     }
-    this.output = this.activation.output(this.totalInput);
+    
+    if (shouldQuantize) {
+      // Log pre-quantization total input
+      console.log(`  Total input: ${this.totalInput}`);
+      
+      // Calculations for quantization
+      let R = 5; // fixed max value
+      const n = Math.pow(2, targetBits); // maximum number able to be represented by target bits
+      const M = R; // symmetrical bound
+      // Calculate scale (zero-point is 0 for symmetrical quantization)
+      const s = (n - 1) / R;
+      const z = 0;
+
+      // Quantize this.totalInput (sum of weight/bias calculations)
+      const clampedIn = Math.max(Math.min(this.totalInput, M), -M)
+      this.totalInput = Math.round(s * clampedIn + z) / s;
+      
+      // Log after input quantization
+      console.log(`  After input quantization: ${this.totalInput}`);
+
+      // Get activation output
+      this.output = this.activation.output(this.totalInput);
+      console.log(`  After activation (before output quantization): ${this.output}`);
+      
+      // Quantize activation output
+      const clampedOut = Math.max(Math.min(this.output, M), -M)
+      this.output = Math.round(s * clampedOut + z) / s;
+      
+      // Log final quantized output
+      console.log(`  Final quantized output: ${this.output}`);
+    } else {
+      // Get activation output without quantization
+      this.output = this.activation.output(this.totalInput);
+    }
+    
     return this.output;
   }
 
@@ -90,7 +125,7 @@ export class Node {
 
     let R: number;
     if (fixed == true){
-      R = 25; // fixed max value
+      R = 5; // fixed max value
     }
     else{
       R = Math.max(...data.map(x => Math.abs(x))); // max absolute value of weight array
@@ -454,7 +489,7 @@ export function buildNetwork(
  *     nodes in the network.
  * @return The final output of the network.
  */
-export function forwardProp(network: Node[][], inputs: number[]): number {
+export function forwardProp(network: Node[][], inputs: number[], shouldQuantize: boolean = false): number {
   let inputLayer = network[0];
   if (inputs.length !== inputLayer.length) {
     throw new Error("The number of inputs must match the number of nodes in" +
@@ -470,7 +505,7 @@ export function forwardProp(network: Node[][], inputs: number[]): number {
     // Update all the nodes in this layer.
     for (let i = 0; i < currentLayer.length; i++) {
       let node = currentLayer[i];
-      node.updateOutput();
+      node.updateOutput(shouldQuantize);
     }
   }
   return network[network.length - 1][0].output;
@@ -620,7 +655,7 @@ export function getOutputNode(network: Node[][]) {
  * @param network - network architecture
  * @param inputs - (x,y) points that are turned into features at each layer
  */
-export function forwardNetEval(network: Node[][], inputs: number[]): string [] {
+export function forwardNetEval(network: Node[][], inputs: number[], shouldQuantize: boolean = false): string [] {
   let inputLayer = network[0];
   if (inputs.length !== inputLayer.length) {
     throw new Error("The number of inputs must match the number of nodes in" +
@@ -638,7 +673,7 @@ export function forwardNetEval(network: Node[][], inputs: number[]): string [] {
     config[layerIdx - 1] = '';
     for (let i = 0; i < currentLayer.length; i++) {
       let node = currentLayer[i];
-      let temp = node.updateOutput().valueOf();
+      let temp = node.updateOutput(shouldQuantize).valueOf();
       if (temp > 0)
         config[layerIdx - 1] = config[layerIdx - 1] + '1';
       else
