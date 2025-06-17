@@ -19,7 +19,7 @@ limitations under the License.
 import {simpleChecksum} from "./checksum";
 import { fixed } from "./playground"; // determines if quantization is performed with a fixed range
 import { targetBits } from "./playground"; 
-import { quantizeArray, quantMethod } from './playground';
+import { quantizeNumber, quantizeArray, quantMethod } from './playground';
 
 /**
  * A node in a neural network. Each node has a state
@@ -75,34 +75,18 @@ export class Node {
     }
     
     if (shouldQuantize) {
-      // Log pre-quantization total input
-      //console.log(`  Total input: ${this.totalInput}`);
+      //console.log(`Total input before quantization: ${this.totalInput}`);
+      // Quantize total input
+      this.totalInput = quantizeNumber(this.totalInput, targetBits, quantMethod);
+      //console.log(`Total input after quantization: ${this.totalInput}`);
       
-      // Calculations for quantization
-      let R = 5; // fixed max value
-      const n = Math.pow(2, targetBits); // maximum number able to be represented by target bits
-      const M = R; // symmetrical bound
-      // Calculate scale (zero-point is 0 for symmetrical quantization)
-      const s = (n - 1) / R;
-      const z = 0;
-
-      // Quantize this.totalInput (sum of weight/bias calculations)
-      const clampedIn = Math.max(Math.min(this.totalInput, M), -M)
-      this.totalInput = Math.round(s * clampedIn + z) / s;
-      
-      // Log after input quantization
-      //console.log(`  After input quantization: ${this.totalInput}`);
-
       // Get activation output
       this.output = this.activation.output(this.totalInput);
-      //console.log(`  After activation (before output quantization): ${this.output}`);
+      //console.log(`After activation (before output quantization): ${this.output}`);
       
       // Quantize activation output
-      const clampedOut = Math.max(Math.min(this.output, M), -M)
-      this.output = Math.round(s * clampedOut + z) / s;
-      
-      // Log final quantized output
-      //console.log(`  Final quantized output: ${this.output}`);
+      this.output = quantizeNumber(this.output, targetBits, quantMethod);
+      //console.log(`Final quantized output: ${this.output}`);
     } else {
       // Get activation output without quantization
       this.output = this.activation.output(this.totalInput);

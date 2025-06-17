@@ -2039,6 +2039,32 @@ export let targetBits = 64;
 //Global variable determining method of quantization
 export let quantMethod = 'max-abs'; // default to max-abs
 
+// Generic function to quantize a single number using either max-abs or min-max method
+export function quantizeNumber(value: number, targetBits: number, quantMethod: string): number {
+  const n = Math.pow(2, targetBits); // maximum number able to be represented by target bits
+  let s = 0; // scale factor
+  let z = 0; // zero-point
+  let M = 0; // upper bound of range
+  let m = 0; // lower bound of range
+
+  if (quantMethod == 'max-abs') {
+    let R = fixed ? 5 : Math.abs(value); // max absolute value
+    M = R; // symmetrical bound
+    s = (n - 1) / R;
+    z = 0; // zero-point is 0 for symmetrical quantization
+    // Apply quantization
+    const clamped = Math.max(Math.min(value, M), -M);
+    return Math.round(s * clamped + z) / s;
+  } else { // min-max quantization
+    m = -2;
+    M = 3;
+    s = (n - 1) / (M - m);
+    z = m * (1 - n) / (M - m);
+    // Apply quantization
+    const clamped = Math.max(Math.min(value, M), m);
+    return Math.round(s * clamped + z) / s;
+  }
+}
 // Generic function to quantize an array of numbers using either max-abs or min-max method
 export function quantizeArray(data: number[], targetBits: number, quantMethod: string): { quantizedData: number[], errors: number[] } {
   if (!Array.isArray(data) || data.length === 0) {
@@ -2167,10 +2193,10 @@ export function quantizationInference(network: nn.Node[][], targetBits) {
   mse_result += ' Test Accuracy: ' + testAccuracy.toFixed(2) + '%<BR>';
   mse_result += '&nbsp; Mean Absolute Quantization Error (Biases): ' + meanAbsErrorBiases.toFixed(6) + '<BR>';
   mse_result += '&nbsp; Mean Absolute Quantization Error (Weights): ' + meanAbsErrorWeights.toFixed(6) + '<BR>';
-  mse_result += '&nbsp; Max bias: ' + maxBias.toFixed(6) + ', ';
-  mse_result += ' Min bias: ' + minBias.toFixed(6) +'<BR>';
-  mse_result += '&nbsp; Max weight: ' + maxWeight.toFixed(6) + ', ';
-  mse_result += ' Min weight: ' + minWeight.toFixed(6) +'<BR>';
+  mse_result += '&nbsp; Max Bias: ' + maxBias.toFixed(6) + ', ';
+  mse_result += ' Min Bias: ' + minBias.toFixed(6) +'<BR>';
+  mse_result += '&nbsp; Max Weight: ' + maxWeight.toFixed(6) + ', ';
+  mse_result += ' Min Weight: ' + minWeight.toFixed(6) +'<BR>';
   let element = document.getElementById("accuracyDiv");
   element.innerHTML = mse_result;
 }
@@ -2827,4 +2853,3 @@ makeGUI();
 generateData(true);
 reset(true);
 hideControls();
-
