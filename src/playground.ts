@@ -2063,8 +2063,8 @@ export function quantizeArray(data: number[], targetBits: number, quantMethod: s
       return Math.round(s * clamped + z) / s;
     });
   } else { // min-max quantization
-    m = -5;
-    M = 5;
+    m = -2;
+    M = 3;
     s = (n - 1) / (M - m);
     z = m * (1 - n) / (M - m);
     // Apply quantization
@@ -2078,7 +2078,7 @@ export function quantizeArray(data: number[], targetBits: number, quantMethod: s
   const errors = data.map((x, i) => x - quantizedData[i]);
   return { quantizedData, errors };
 }
-// Uses quantizeArray function to quantize the biases 
+// Uses quantizeArray function to quantize the biases and returns quantizes biases, quantization errors, and max and min biases
 export function quantizeBiases(network: nn.Node[][], targetBits: number) {
   // Collect all biases into an array
   let data: number[] = [];
@@ -2089,6 +2089,9 @@ export function quantizeBiases(network: nn.Node[][], targetBits: number) {
       data.push(node.fp64Bias);
     }
   }
+  // find max and min of biases
+  let maxBias = Math.max(...data);
+  let minBias = Math.min(...data);
 
   // Quantize the biases
   let { quantizedData, errors } = quantizeArray(data, targetBits, quantMethod);
@@ -2104,21 +2107,24 @@ export function quantizeBiases(network: nn.Node[][], targetBits: number) {
     }
   }
 
-  return { biasQuantizedData: quantizedData, biasErrors: errors };
+  return { biasQuantizedData: quantizedData, biasErrors: errors , maxBias, minBias};
 }
 
 // Performs inference after quantization and computes average error, accuracy, loss 
 export function quantizationInference(network: nn.Node[][], targetBits) {
   // Quantizes all the model's biases based on an inputted precision
-  let { biasQuantizedData, biasErrors } = quantizeBiases(network, targetBits);
+  let { biasErrors, maxBias, minBias } = quantizeBiases(network, targetBits);
   
   // Quantizes all the model's weights based on an inputted precision and collects errors
   let allWeightErrors: number[] = [];
+  let weightErrors: number[] = []; // stores a single node's weight quantization errors
+  let minWeight = 0;
+  let maxWeight = 0;
   for (let layerIdx = 1; layerIdx < network.length; layerIdx++) {
     let currentLayer = network[layerIdx];
     for (let i = 0; i < currentLayer.length; i++) {
       let node = currentLayer[i];
-      let { weightQuantizedData, weightErrors } = node.quantizeWeights(targetBits);
+      ({  weightErrors, maxWeight, minWeight } = node.quantizeWeights(targetBits));
       allWeightErrors.push(...weightErrors);
     }
   }
@@ -2161,6 +2167,10 @@ export function quantizationInference(network: nn.Node[][], targetBits) {
   mse_result += ' Test Accuracy: ' + testAccuracy.toFixed(2) + '%<BR>';
   mse_result += '&nbsp; Mean Absolute Quantization Error (Biases): ' + meanAbsErrorBiases.toFixed(6) + '<BR>';
   mse_result += '&nbsp; Mean Absolute Quantization Error (Weights): ' + meanAbsErrorWeights.toFixed(6) + '<BR>';
+  mse_result += '&nbsp; Max bias: ' + maxBias.toFixed(6) + ', ';
+  mse_result += ' Min bias: ' + minBias.toFixed(6) +'<BR>';
+  mse_result += '&nbsp; Max weight: ' + maxWeight.toFixed(6) + ', ';
+  mse_result += ' Min weight: ' + minWeight.toFixed(6) +'<BR>';
   let element = document.getElementById("accuracyDiv");
   element.innerHTML = mse_result;
 }

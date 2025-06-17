@@ -111,14 +111,18 @@ export class Node {
     return this.output;
   }
 
-  // Quantizes weights using generic quantization function
-  quantizeWeights(targetBits: number): { weightQuantizedData: number[], weightErrors: number[] } { 
+  // Quantizes weights using quantizeArray function and returns quantized weights, quantization errors, and max and min weight
+  quantizeWeights(targetBits: number): { weightQuantizedData: number[], weightErrors: number[], maxWeight: number, minWeight: number } { 
     let data: number[] = []; 
     // Adds all FP64 weights to data array
     for (let j = 0; j < this.inputLinks.length; j++) {
       let link = this.inputLinks[j];
       data.push(link.fp64Weight)
     }
+
+    // find max and min of weights
+    let maxWeight = Math.max(...data);
+    let minWeight = Math.min(...data);
 
     // Use the generic quantization function
     let { quantizedData, errors } = quantizeArray(data, targetBits, quantMethod);
@@ -128,7 +132,7 @@ export class Node {
       this.inputLinks[j].weight = quantizedData[j]; // updates link weight
     }
 
-    return { weightQuantizedData: quantizedData, weightErrors: errors };
+    return { weightQuantizedData: quantizedData, weightErrors: errors, maxWeight, minWeight };
   } 
 
   /////////////////////////////////
