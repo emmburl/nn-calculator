@@ -2036,55 +2036,75 @@ function predict(network: nn.Node[][], dataPoints: Example2D[]): number[] {
 export let fixed = true;
 //Global variable determining target bits to quantize to
 export let targetBits = 64;
-// Quantizes biases of network and calculates error
-export function quantizeBiases(network: nn.Node[][], targetBits){
-  let data: number[] = []; 
-  // adds all biases to an array
-  for (let layerIdx = 1; layerIdx < network.length; layerIdx++) {
-    let currentLayer = network[layerIdx];
-    for (let i = 0; i < currentLayer.length; i++) {
-      let node = currentLayer[i];
-      data.push(node.fp64Bias)
-    }
-  }
+//Global variable determining method of quantization
+export let quantMethod = 'max-abs'; // default to max-abs
 
+// Generic function to quantize an array of numbers using either max-abs or min-max method
+export function quantizeArray(data: number[], targetBits: number, quantMethod: string): { quantizedData: number[], errors: number[] } {
   if (!Array.isArray(data) || data.length === 0) {
     throw new Error('Data must be a non-empty array');
   }
-  let R: number;
-  if (fixed == true){
-    R = 5; // fixed max value
-  }
-  else{
-    R = Math.max(...data.map(x => Math.abs(x))); // max absolute value of weight array
-  }
-  
+
   const n = Math.pow(2, targetBits); // maximum number able to be represented by target bits
-  const M = R; // symmetrical bound
+  let s = 0; // scale factor
+  let z = 0; // zero-point
+  let M = 0; // upper bound of range
+  let m = 0; // lower bound of range
+  let quantizedData: number[] = [];
 
-  // Calculate scale (zero-point is 0 for symmetrical quantization)
-  const s = (n - 1) / R;
-  const z = 0;
+  if (quantMethod == 'max-abs') {
+    let R = fixed ? 5 : Math.max(...data.map(x => Math.abs(x))); // max absolute value
+    M = R; // symmetrical bound
+    s = (n - 1) / R;
+    z = 0; // zero-point is 0 for symmetrical quantization
+    // Apply quantization
+    quantizedData = data.map(x => {
+      const clamped = Math.max(Math.min(x, M), -M);
+      return Math.round(s * clamped + z) / s;
+    });
+  } else { // min-max quantization
+    m = -5;
+    M = 5;
+    s = (n - 1) / (M - m);
+    z = m * (1 - n) / (M - m);
+    // Apply quantization
+    quantizedData = data.map(x => {
+      const clamped = Math.max(Math.min(x, M), m);
+      return Math.round(s * clamped + z) / s;
+    });
+  }
 
-  // Apply quantization
-  const quantizedData = data.map(x => {
-    const clamped = Math.max(Math.min(x, M), -M);
-    return Math.round(s * clamped + z) / s;
-  });
-
-  // Updates the actual biases with quantized values and calculates the error
-  let biasIndex = 0;
-  let allErrors: number[] = [];
+  // Calculate errors between original fp64 values and quantized values
+  const errors = data.map((x, i) => x - quantizedData[i]);
+  return { quantizedData, errors };
+}
+// Uses quantizeArray function to quantize the biases 
+export function quantizeBiases(network: nn.Node[][], targetBits: number) {
+  // Collect all biases into an array
+  let data: number[] = [];
   for (let layerIdx = 1; layerIdx < network.length; layerIdx++) {
     let currentLayer = network[layerIdx];
     for (let i = 0; i < currentLayer.length; i++) {
       let node = currentLayer[i];
-      node.bias = quantizedData[biasIndex]; // updates bias
-      allErrors.push(node.fp64Bias - node.bias); // calculates error
-      biasIndex++; 
+      data.push(node.fp64Bias);
     }
   }
-  return { biasQuantizedData: quantizedData, biasErrors: allErrors };
+
+  // Quantize the biases
+  let { quantizedData, errors } = quantizeArray(data, targetBits, quantMethod);
+
+  // Update the network's biases with quantized values
+  let biasIndex = 0;
+  for (let layerIdx = 1; layerIdx < network.length; layerIdx++) {
+    let currentLayer = network[layerIdx];
+    for (let i = 0; i < currentLayer.length; i++) {
+      let node = currentLayer[i];
+      node.bias = quantizedData[biasIndex];
+      biasIndex++;
+    }
+  }
+
+  return { biasQuantizedData: quantizedData, biasErrors: errors };
 }
 
 // Performs inference after quantization and computes average error, accuracy, loss 
@@ -2145,16 +2165,25 @@ export function quantizationInference(network: nn.Node[][], targetBits) {
   element.innerHTML = mse_result;
 }
 
-// When dropdown menu is changed , feed selectedValue as targetBits number for quantization
+// Sets global variable quantMethod based on selected quantization method
+d3.select("#quantize-method").on("change", function() {
+  const selectedMethod = this.value;
+  if (selectedMethod) {
+    quantMethod = selectedMethod;
+    console.log("Quantization method:", selectedMethod);
+  }
+});
+// When dropdown menu is changed, feed selectedValue as targetBits number for quantization inference
 d3.select("#quantize-select").on("change", function () {
   const selectedValue = +this.value; // convert string to number
   console.log("Target bits:", selectedValue);
-  
   if (selectedValue > 0) { // set the "select precision" option to a value of zero which should not be quantized
     targetBits = selectedValue
     quantizationInference(network, targetBits);
   }
 });
+
+
 
 function updateUI(firstStep = false) {
   // Update the links visually.

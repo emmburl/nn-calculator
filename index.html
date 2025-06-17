@@ -269,7 +269,18 @@ limitations under the License.
             <input class="mdl-slider mdl-js-slider" type="range" id="trojan" min="0" max="10" step="1">
           </p>
         </div>
-        <!-- Dropdown menu for quantization button-->
+        <!-- Dropdown menu for choosing quantization method -->
+        <div class="ui-quant-method">
+          <label for="quantize-method">
+            Quantization Method:
+            <select id="quantize-method" class="quant-dropdown">
+              <option value="">Select Method</option>
+              <option value="max-abs">Max-Abs</option>
+              <option value="min-max">Min-Max</option>
+            </select>
+          </label>
+        </div>
+        <!-- Dropdown menu for choosing quantization precision-->
         <div class="ui-quant">
           <label for="quantize-select">
             Quantize to:
