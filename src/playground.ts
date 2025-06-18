@@ -1563,6 +1563,78 @@ function makeGUI() {
     d3.select("div.more").style("display", "none");
     d3.select("header").style("display", "none");
   }
+
+  // create histogram of FP64 weights frequency
+  d3.select("#data-nn-weights-histogram-button").on("click", () => {
+    // reset the visualization
+    reset_analysis_vis();
+
+    // Collect all FP64 weights into an array
+    let fp64Weights: number[] = [];
+    for (let layerIdx = 1; layerIdx < network.length; layerIdx++) {
+      let currentLayer = network[layerIdx];
+      for (let i = 0; i < currentLayer.length; i++) {
+        let node = currentLayer[i];
+        for (let j = 0; j < node.inputLinks.length; j++) {
+          let link = node.inputLinks[j];
+          fp64Weights.push(link.fp64Weight);
+        }
+      }
+    }
+
+    // Find min and max for histogram bins
+    let minWeight = Math.min(...fp64Weights);
+    let maxWeight = Math.max(...fp64Weights);
+    let weightRange = maxWeight - minWeight;
+    
+    // Create histogram bins (let's use 50 bins for good resolution)
+    let numBins = 50;
+    let binWidth = weightRange / numBins;
+    let hist = new Array(numBins);
+    hist.fill(0);
+
+    // Fill histogram
+    for (let i = 0; i < fp64Weights.length; i++) {
+      let binIndex = Math.floor((fp64Weights[i] - minWeight) / binWidth);
+      // Handle edge case where weight equals maxWeight
+      if (binIndex >= numBins) {
+        binIndex = numBins - 1;
+      }
+      hist[binIndex]++;
+    }
+
+    // Prepare the histogram plotting data
+    let mapping = [];
+    for (let idx = 0; idx < hist.length; idx++) {
+      mapping[idx] = new Map<string, number>();
+      let binStart = minWeight + idx * binWidth;
+      let binEnd = minWeight + (idx + 1) * binWidth;
+      let binLabel = `[${binStart.toFixed(3)}, ${binEnd.toFixed(3)})`;
+      mapping[idx].set(binLabel, hist[idx]);
+    }
+
+    let text = 'FP64 Weights Distribution: Histogram of original FP64 weights before quantization';
+    let histWeights = new AppendingHistogramChart(mapping, text);
+    let title = 'FP64 Weights: Frequency distribution';
+    let weights_result = '&nbsp;Histogram of FP64 Weights Distribution <BR>' + histWeights.showKLHistogram('histDivTrainN', title);
+
+    // Add statistics
+    let meanWeight = fp64Weights.reduce((sum, weight) => sum + weight, 0) / fp64Weights.length;
+    let variance = fp64Weights.reduce((sum, weight) => sum + Math.pow(weight - meanWeight, 2), 0) / fp64Weights.length;
+    let stdDev = Math.sqrt(variance);
+
+    weights_result += `&nbsp;Total FP64 weights: ${fp64Weights.length}<BR>`;
+    weights_result += `&nbsp;Min weight: ${minWeight.toFixed(6)}<BR>`;
+    weights_result += `&nbsp;Max weight: ${maxWeight.toFixed(6)}<BR>`;
+    weights_result += `&nbsp;Mean weight: ${meanWeight.toFixed(6)}<BR>`;
+    weights_result += `&nbsp;Standard deviation: ${stdDev.toFixed(6)}<BR>`;
+    weights_result += `&nbsp;Weight range: ${weightRange.toFixed(6)}<BR>`;
+
+    let element = document.getElementById("KLdivergenceDiv");
+    element.innerHTML = weights_result;
+
+    userHasInteracted();
+  });
 }
 
 function updateBiasesUI(network: nn.Node[][]) {
@@ -2056,13 +2128,13 @@ export function quantizeNumber(value: number, targetBits: number, quantMethod: s
     const clamped = Math.max(Math.min(value, M), -M);
     return Math.round(s * clamped + z) / s;
   } else { // min-max quantization
-    m = -2;
-    M = 3;
+    m = -5;
+    M = 4;
     s = (n - 1) / (M - m);
     z = m * (1 - n) / (M - m);
     // Apply quantization
     const clamped = Math.max(Math.min(value, M), m);
-    return Math.round(s * clamped + z) / s;
+    return (Math.round(s * clamped + z) - z) / s;
   }
 }
 // Generic function to quantize an array of numbers using either max-abs or min-max method
@@ -2089,14 +2161,14 @@ export function quantizeArray(data: number[], targetBits: number, quantMethod: s
       return Math.round(s * clamped + z) / s;
     });
   } else { // min-max quantization
-    m = -2;
-    M = 3;
+    m = -5;
+    M = 4;
     s = (n - 1) / (M - m);
     z = m * (1 - n) / (M - m);
     // Apply quantization
     quantizedData = data.map(x => {
       const clamped = Math.max(Math.min(x, M), m);
-      return Math.round(s * clamped + z) / s;
+      return (Math.round(s * clamped + z) - z) / s;
     });
   }
 
@@ -2104,6 +2176,7 @@ export function quantizeArray(data: number[], targetBits: number, quantMethod: s
   const errors = data.map((x, i) => x - quantizedData[i]);
   return { quantizedData, errors };
 }
+
 // Uses quantizeArray function to quantize the biases and returns quantizes biases, quantization errors, and max and min biases
 export function quantizeBiases(network: nn.Node[][], targetBits: number) {
   // Collect all biases into an array
@@ -2150,7 +2223,7 @@ export function quantizationInference(network: nn.Node[][], targetBits) {
     let currentLayer = network[layerIdx];
     for (let i = 0; i < currentLayer.length; i++) {
       let node = currentLayer[i];
-      ({  weightErrors, maxWeight, minWeight } = node.quantizeWeights(targetBits));
+      ({  weightErrors, maxWeight, minWeight } = node.quantizeWeights(targetBits)); // quantize weights
       allWeightErrors.push(...weightErrors);
     }
   }
