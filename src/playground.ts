@@ -1587,11 +1587,11 @@ function makeGUI() {
     let maxWeight = Math.max(...fp64Weights);
     let weightRange = maxWeight - minWeight;
     
-    // Create histogram bins (let's use 50 bins for good resolution)
-    let numBins = 50;
+    // Create histogram bins 
+    let numBins = 100;
     let binWidth = weightRange / numBins;
-    let hist = new Array(numBins);
-    hist.fill(0);
+    let hist = new Array(numBins); // creates new array with 100 slots
+    hist.fill(0); // initialize all bins with zero frequency
 
     // Fill histogram
     for (let i = 0; i < fp64Weights.length; i++) {
@@ -1600,7 +1600,7 @@ function makeGUI() {
       if (binIndex >= numBins) {
         binIndex = numBins - 1;
       }
-      hist[binIndex]++;
+      hist[binIndex]++; // adds 1 to bin the weight falls into
     }
 
     // Prepare the histogram plotting data
@@ -1610,24 +1610,21 @@ function makeGUI() {
       let binStart = minWeight + idx * binWidth;
       let binEnd = minWeight + (idx + 1) * binWidth;
       let binLabel = `[${binStart.toFixed(3)}, ${binEnd.toFixed(3)})`;
-      mapping[idx].set(binLabel, hist[idx]);
+      mapping[idx].set(binLabel, hist[idx]); // maps bin range to frequency
     }
 
-    let text = 'FP64 Weights Distribution: Histogram of original FP64 weights before quantization';
+    let text = 'Frequency of original FP64 weights before quantization';
     let histWeights = new AppendingHistogramChart(mapping, text);
     let title = 'FP64 Weights: Frequency distribution';
-    let weights_result = '&nbsp;Histogram of FP64 Weights Distribution <BR>' + histWeights.showKLHistogram('histDivTrainN', title);
+    let weights_result = histWeights.showKLHistogram('histDivTrainN', title);
 
-    // Add statistics
+    // Calculate mean weight
     let meanWeight = fp64Weights.reduce((sum, weight) => sum + weight, 0) / fp64Weights.length;
-    let variance = fp64Weights.reduce((sum, weight) => sum + Math.pow(weight - meanWeight, 2), 0) / fp64Weights.length;
-    let stdDev = Math.sqrt(variance);
 
     weights_result += `&nbsp;Total FP64 weights: ${fp64Weights.length}<BR>`;
     weights_result += `&nbsp;Min weight: ${minWeight.toFixed(6)}<BR>`;
     weights_result += `&nbsp;Max weight: ${maxWeight.toFixed(6)}<BR>`;
     weights_result += `&nbsp;Mean weight: ${meanWeight.toFixed(6)}<BR>`;
-    weights_result += `&nbsp;Standard deviation: ${stdDev.toFixed(6)}<BR>`;
     weights_result += `&nbsp;Weight range: ${weightRange.toFixed(6)}<BR>`;
 
     let element = document.getElementById("KLdivergenceDiv");
