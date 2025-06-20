@@ -1564,7 +1564,7 @@ function makeGUI() {
     d3.select("header").style("display", "none");
   }
 
-  // create histogram of FP64 weights frequency
+  // create histogram of FP64 weights frequency when "FP 64 Weight Histogram" button is clicked
   d3.select("#data-nn-weights-histogram-button").on("click", () => {
     // reset the visualization
     reset_analysis_vis();
@@ -2175,7 +2175,7 @@ export function quantizeArray(data: number[], targetBits: number, quantMethod: s
 }
 
 // Uses quantizeArray function to quantize the biases and returns quantizes biases, quantization errors, and max and min biases
-export function quantizeBiases(network: nn.Node[][], targetBits: number) {
+export function quantizeBiases(network: nn.Node[][], targetBits: number, quant_method_param) {
   // Collect all biases into an array
   let data: number[] = [];
   for (let layerIdx = 1; layerIdx < network.length; layerIdx++) {
@@ -2190,7 +2190,7 @@ export function quantizeBiases(network: nn.Node[][], targetBits: number) {
   let minBias = Math.min(...data);
 
   // Quantize the biases
-  let { quantizedData, errors } = quantizeArray(data, targetBits, quantMethod);
+  let { quantizedData, errors } = quantizeArray(data, targetBits, quant_method_param);
 
   // Update the network's biases with quantized values
   let biasIndex = 0;
@@ -2207,9 +2207,9 @@ export function quantizeBiases(network: nn.Node[][], targetBits: number) {
 }
 
 // Performs inference after quantization and computes average error, accuracy, loss 
-export function quantizationInference(network: nn.Node[][], targetBits) {
+export function quantizationInference(network: nn.Node[][], targetBits, quant_method_param = quantMethod) {
   // Quantizes all the model's biases based on an inputted precision
-  let { biasErrors, maxBias, minBias } = quantizeBiases(network, targetBits);
+  let { biasErrors, maxBias, minBias } = quantizeBiases(network, targetBits, quant_method_param);
   
   // Quantizes all the model's weights based on an inputted precision and collects errors
   let allWeightErrors: number[] = [];
@@ -2220,7 +2220,7 @@ export function quantizationInference(network: nn.Node[][], targetBits) {
     let currentLayer = network[layerIdx];
     for (let i = 0; i < currentLayer.length; i++) {
       let node = currentLayer[i];
-      ({  weightErrors, maxWeight, minWeight } = node.quantizeWeights(targetBits)); // quantize weights
+      ({  weightErrors, maxWeight, minWeight } = node.quantizeWeights(targetBits, quant_method_param)); // quantize weights
       allWeightErrors.push(...weightErrors);
     }
   }
@@ -2289,7 +2289,77 @@ d3.select("#quantize-select").on("change", function () {
   }
 });
 
+// trains any network (similar to oneStep function but for any network)
+function trainOneEpoch(net, trainData, learningRate = 0.03, regularizationRate = 0, batchSize = 10, errorFunc = nn.Errors.SQUARE) {
+  for (let i = 0; i < trainData.length; i++) {
+    const point = trainData[i];
+    const input = constructInput(point.x, point.y);
 
+    nn.forwardProp(net, input);
+    nn.backProp(net, point.label, errorFunc);
+
+    if ((i + 1) % batchSize === 0) { // update weights after a full batch
+      nn.updateWeights(net, learningRate, regularizationRate);
+    }
+  }
+  // Update weights for any remaining data
+  nn.updateWeights(net, learningRate, regularizationRate);
+}
+
+// runs experiments -- model size and quantization vs accuracy
+export function experiment(){
+
+  // should all features be the same type? or combos
+  const dataset_types = ["spiral", "gauss"];
+  const quant_precisions = [64, 32, 16, 8, 4, 2, 1];
+  const quant_methods = ["max-abs","min-max"];
+  const numSamples = 500;
+  const trainRatio = 0.5;
+  const epochs = 100;
+
+  for (let dataset_name of dataset_types) {
+    const generator = datasets[dataset_name];
+    const data = generator(numSamples, 0, 0, 256, 15); // last four arguments are default for noise level, trojans, and checksum modulo and precision
+    const splitIndex = Math.floor(data.length * trainRatio);
+    const trainData = data.slice(0, splitIndex);
+    const testData = data.slice(splitIndex);
+
+    // builds networks of varying sizes
+    for (let num_layers = 1; num_layers < 4; num_layers++) {
+      for (let num_nodes = 1; num_nodes < 6; num_nodes += 2) {
+        for (let num_features = 1; num_features < 4; num_features++){
+          let hiddenLayers = Array(num_layers).fill(num_nodes);
+          let shape = [num_features, ...hiddenLayers, 1];
+          let outputActivation = (state.problem === Problem.REGRESSION) ?
+              nn.Activations.LINEAR : nn.Activations.TANH; // linear output for regression, nonlinear for classification
+          let testNetwork = nn.buildNetwork(
+            shape,
+            state.activation,
+            outputActivation,
+            state.regularization,
+            constructInputIds(),
+            state.initZero
+          );
+          
+          // Train network
+          for (let epoch = 0; epoch < epochs; epoch++ ){
+            trainOneEpoch(testNetwork, trainData); // train with default values for learning rate, regularization rate, batch size, and error function
+          }
+  
+            // loop for quantization and inference
+            for (let precision of quant_precisions){
+              for (let method of quant_methods){
+              quantizationInference(testNetwork, precision, method);
+              }
+            }
+        }
+        
+      }
+    }
+  }
+  
+
+}
 
 function updateUI(firstStep = false) {
   // Update the links visually.
