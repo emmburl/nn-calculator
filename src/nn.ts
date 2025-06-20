@@ -66,7 +66,7 @@ export class Node {
   }
 
   /** Recomputes the node's output and returns it. */
-  updateOutput(shouldQuantize: boolean = false): number {
+  updateOutput(shouldQuantize: boolean = false, quantMethod?: string, targetBits?: number): number {
     // Stores total input into the node.
     this.totalInput = this.bias;
     for (let j = 0; j < this.inputLinks.length; j++) {
@@ -75,6 +75,9 @@ export class Node {
     }
     
     if (shouldQuantize) {
+      if (quantMethod == null || targetBits == null) {
+        throw new Error("quantMethod and targetBits must be provided when shouldQuantize is true.");
+      }
       //console.log(`Total input before quantization: ${this.totalInput}`);
       // Quantize total input
       this.totalInput = quantizeNumber(this.totalInput, targetBits, quantMethod);
@@ -96,7 +99,7 @@ export class Node {
   }
 
   // Quantizes weights using quantizeArray function and returns quantized weights, quantization errors, and max and min weight
-  quantizeWeights(targetBits: number, quant_method_param): { weightQuantizedData: number[], weightErrors: number[], maxWeight: number, minWeight: number } { 
+  quantizeWeights(targetBits: number, quantMethod: string): { weightQuantizedData: number[], weightErrors: number[], maxWeight: number, minWeight: number } { 
     let data: number[] = []; 
     // Adds all FP64 weights to data array
     for (let j = 0; j < this.inputLinks.length; j++) {
@@ -109,7 +112,7 @@ export class Node {
     let minWeight = Math.min(...data);
 
     // Use the generic quantization function
-    let { quantizedData, errors } = quantizeArray(data, targetBits, quant_method_param);
+    let { quantizedData, errors } = quantizeArray(data, targetBits, quantMethod);
 
     // Update the actual link weights with quantized values
     for (let j = 0; j < this.inputLinks.length; j++) {
@@ -454,7 +457,7 @@ export function buildNetwork(
  *     nodes in the network.
  * @return The final output of the network.
  */
-export function forwardProp(network: Node[][], inputs: number[], shouldQuantize: boolean = false): number {
+export function forwardProp(network: Node[][], inputs: number[], shouldQuantize: boolean = false, quantMethod?: string, targetBits?: number): number {
   let inputLayer = network[0];
   if (inputs.length !== inputLayer.length) {
     throw new Error("The number of inputs must match the number of nodes in" +
@@ -470,7 +473,7 @@ export function forwardProp(network: Node[][], inputs: number[], shouldQuantize:
     // Update all the nodes in this layer.
     for (let i = 0; i < currentLayer.length; i++) {
       let node = currentLayer[i];
-      node.updateOutput(shouldQuantize);
+      node.updateOutput(shouldQuantize, quantMethod, targetBits);
     }
   }
   return network[network.length - 1][0].output;

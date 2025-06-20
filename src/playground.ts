@@ -2077,24 +2077,26 @@ function updateDecisionBoundary(network: nn.Node[][], firstTime: boolean) {
   }
 }
 
-function getLoss(network: nn.Node[][], dataPoints: Example2D[]): number {
+function getLoss(network: nn.Node[][], dataPoints: Example2D[], quantMethod?: string, targetBits?: number): number {
   let loss = 0;
+  const shouldQuantize = quantMethod != null && targetBits != null;
   for (let i = 0; i < dataPoints.length; i++) {
     let dataPoint = dataPoints[i];
     let input = constructInput(dataPoint.x, dataPoint.y);
-    let output = nn.forwardProp(network, input, true); // Pass true to enable quantization of total input/sum and activations
+    let output = nn.forwardProp(network, input, shouldQuantize, quantMethod, targetBits);
     loss += nn.Errors.SQUARE.error(output, dataPoint.label);
   }
   return loss / dataPoints.length;
 }
 
 // Returns array of predictions (1 or -1) for each input in a data set
-function predict(network: nn.Node[][], dataPoints: Example2D[]): number[] {
+function predict(network: nn.Node[][], dataPoints: Example2D[], quantMethod?: string, targetBits?: number): number[] {
   let predictions: number[] = [];
+  const shouldQuantize = quantMethod != null && targetBits != null;
   for (let i = 0; i < dataPoints.length; i++) {
     let dataPoint = dataPoints[i];
     let input = constructInput(dataPoint.x, dataPoint.y);
-    let output = nn.forwardProp(network, input, true); // Pass true to enable quantization
+    let output = nn.forwardProp(network, input, shouldQuantize, quantMethod, targetBits);
     output = output > 0 ? 1 : -1;
     predictions.push(output)
   }
@@ -2175,7 +2177,7 @@ export function quantizeArray(data: number[], targetBits: number, quantMethod: s
 }
 
 // Uses quantizeArray function to quantize the biases and returns quantizes biases, quantization errors, and max and min biases
-export function quantizeBiases(network: nn.Node[][], targetBits: number, quant_method_param) {
+export function quantizeBiases(network: nn.Node[][], targetBits: number, quantMethod: string) {
   // Collect all biases into an array
   let data: number[] = [];
   for (let layerIdx = 1; layerIdx < network.length; layerIdx++) {
@@ -2190,7 +2192,7 @@ export function quantizeBiases(network: nn.Node[][], targetBits: number, quant_m
   let minBias = Math.min(...data);
 
   // Quantize the biases
-  let { quantizedData, errors } = quantizeArray(data, targetBits, quant_method_param);
+  let { quantizedData, errors } = quantizeArray(data, targetBits, quantMethod);
 
   // Update the network's biases with quantized values
   let biasIndex = 0;
@@ -2207,9 +2209,9 @@ export function quantizeBiases(network: nn.Node[][], targetBits: number, quant_m
 }
 
 // Performs inference after quantization and computes average error, accuracy, loss 
-export function quantizationInference(network: nn.Node[][], targetBits, quant_method_param = quantMethod) {
+export function quantizationInference(network: nn.Node[][], targetBits: number, quantMethod: string) {
   // Quantizes all the model's biases based on an inputted precision
-  let { biasErrors, maxBias, minBias } = quantizeBiases(network, targetBits, quant_method_param);
+  let { biasErrors, maxBias, minBias } = quantizeBiases(network, targetBits, quantMethod);
   
   // Quantizes all the model's weights based on an inputted precision and collects errors
   let allWeightErrors: number[] = [];
@@ -2220,14 +2222,14 @@ export function quantizationInference(network: nn.Node[][], targetBits, quant_me
     let currentLayer = network[layerIdx];
     for (let i = 0; i < currentLayer.length; i++) {
       let node = currentLayer[i];
-      ({  weightErrors, maxWeight, minWeight } = node.quantizeWeights(targetBits, quant_method_param)); // quantize weights
+      ({  weightErrors, maxWeight, minWeight } = node.quantizeWeights(targetBits, quantMethod)); // quantize weights
       allWeightErrors.push(...weightErrors);
     }
   }
   
   // Computes accuracy on train data and test data
   let trainCorrect = 0;
-  let trainPredictions = predict(network, trainData)
+  let trainPredictions = predict(network, trainData, quantMethod, targetBits);
   for (let i = 0; i < trainData.length; i++) {
     let dataPoint = trainData[i];
     if (trainPredictions[i] == dataPoint.label){
@@ -2236,7 +2238,7 @@ export function quantizationInference(network: nn.Node[][], targetBits, quant_me
   }
 
   let testCorrect = 0;
-  let testPredictions = predict(network, testData)
+  let testPredictions = predict(network, testData, quantMethod, targetBits);
   for (let i = 0; i < testData.length; i++) {
     let dataPoint = testData[i];
     if (testPredictions[i] == dataPoint.label){ 
@@ -2248,8 +2250,8 @@ export function quantizationInference(network: nn.Node[][], targetBits, quant_me
   let testAccuracy = (testCorrect / testData.length) * 100;
 
   // Computes loss after inference on train and test data
-  lossTrain = getLoss(network, trainData);
-  lossTest = getLoss(network, testData);
+  lossTrain = getLoss(network, trainData, quantMethod, targetBits);
+  lossTest = getLoss(network, testData, quantMethod, targetBits);
 
   // Calculates mean absolute error of quantization for biases and weights
   let meanAbsErrorBiases = biasErrors.reduce((sum, error) => sum + Math.abs(error), 0) / biasErrors.length;
@@ -2285,7 +2287,7 @@ d3.select("#quantize-select").on("change", function () {
   console.log("Target bits:", selectedValue);
   if (selectedValue > 0) { // set the "select precision" option to a value of zero which should not be quantized
     targetBits = selectedValue
-    quantizationInference(network, targetBits);
+    quantizationInference(network, targetBits, quantMethod);
   }
 });
 
