@@ -2271,6 +2271,9 @@ export function quantizationInference(network: nn.Node[][], targetBits: number, 
   mse_result += ' Min Weight: ' + minWeight.toFixed(6) +'<BR>';
   let element = document.getElementById("accuracyDiv");
   element.innerHTML = mse_result;
+
+  // returns test loss, test accuracy, and mean absolute error for biases and weights
+  return {lossTest, testAccuracy, meanAbsErrorBiases, meanAbsErrorWeights};
 }
 
 // Sets global variable quantMethod based on selected quantization method
@@ -2281,6 +2284,7 @@ d3.select("#quantize-method").on("change", function() {
     console.log("Quantization method:", selectedMethod);
   }
 });
+
 // When dropdown menu is changed, feed selectedValue as targetBits number for quantization inference
 d3.select("#quantize-select").on("change", function () {
   const selectedValue = +this.value; // convert string to number
@@ -2307,11 +2311,19 @@ function trainOneEpoch(net, trainData, learningRate = 0.03, regularizationRate =
   // Update weights for any remaining data
   nn.updateWeights(net, learningRate, regularizationRate);
 }
-
+// sets which features are enabled without relying on UI
+function setFeaturesForExperiment(featureNames: string[]): void {
+  for (let inputName in INPUTS) state[inputName] = false;
+  for (let featureName of featureNames) state[featureName] = true;
+}
 // runs experiments -- model size and quantization vs accuracy
 export function experiment(){
 
-  // should all features be the same type? or combos
+  const featureSets = [
+    ["x", "y"],           // (x1, x2)
+    ["xSquared", "ySquared"], // (x1^2, x2^2)
+    ["x","y", "xSquared", "ySquared"] // (x1, x2, x1^2, x2^2)
+  ];
   const dataset_types = ["spiral", "gauss"];
   const quant_precisions = [64, 32, 16, 8, 4, 2, 1];
   const quant_methods = ["max-abs","min-max"];
@@ -2319,6 +2331,12 @@ export function experiment(){
   const trainRatio = 0.5;
   const epochs = 100;
 
+  let lossTest = 0;
+  let testAccuracy = 0;
+  let meanAbsErrorBiases = 0;
+  let meanAbsErrorWeights = 0;
+
+  let results = [];
   for (let dataset_name of dataset_types) {
     const generator = datasets[dataset_name];
     const data = generator(numSamples, 0, 0, 256, 15); // last four arguments are default for noise level, trojans, and checksum modulo and precision
@@ -2329,9 +2347,10 @@ export function experiment(){
     // builds networks of varying sizes
     for (let num_layers = 1; num_layers < 4; num_layers++) {
       for (let num_nodes = 1; num_nodes < 6; num_nodes += 2) {
-        for (let num_features = 1; num_features < 4; num_features++){
+        for (let featureSet of featureSets){
+          setFeaturesForExperiment(featureSet);
           let hiddenLayers = Array(num_layers).fill(num_nodes);
-          let shape = [num_features, ...hiddenLayers, 1];
+          let shape = [featureSet.length, ...hiddenLayers, 1];
           let outputActivation = (state.problem === Problem.REGRESSION) ?
               nn.Activations.LINEAR : nn.Activations.TANH; // linear output for regression, nonlinear for classification
           let testNetwork = nn.buildNetwork(
@@ -2351,16 +2370,23 @@ export function experiment(){
             // loop for quantization and inference
             for (let precision of quant_precisions){
               for (let method of quant_methods){
-              quantizationInference(testNetwork, precision, method);
+                ({  lossTest, testAccuracy, meanAbsErrorBiases, meanAbsErrorWeights } = quantizationInference(testNetwork, precision, method));
+                results.push({
+                  dataset: dataset_name, 
+                  numLayers: num_layers, 
+                  numNodes: num_nodes, 
+                  featureSet: featureSet.join(","), 
+                  numFeatures: featureSet.length,
+                  quantizationPrecision: precision,
+                  quantizationMethod: method,
+                  testLoss: lossTest
+                });
               }
-            }
+            } 
         }
-        
       }
     }
   }
-  
-
 }
 
 function updateUI(firstStep = false) {
