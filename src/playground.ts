@@ -2209,7 +2209,7 @@ export function quantizeBiases(network: nn.Node[][], targetBits: number, quantMe
 }
 
 // Performs inference after quantization and computes average error, accuracy, loss 
-export function quantizationInference(network: nn.Node[][], targetBits: number, quantMethod: string) {
+export function quantizationInference(network: nn.Node[][], targetBits: number, quantMethod: string, train_data = trainData, test_data = testData) {
   // Quantizes all the model's biases based on an inputted precision
   let { biasErrors, maxBias, minBias } = quantizeBiases(network, targetBits, quantMethod);
   
@@ -2229,29 +2229,29 @@ export function quantizationInference(network: nn.Node[][], targetBits: number, 
   
   // Computes accuracy on train data and test data
   let trainCorrect = 0;
-  let trainPredictions = predict(network, trainData, quantMethod, targetBits);
-  for (let i = 0; i < trainData.length; i++) {
-    let dataPoint = trainData[i];
+  let trainPredictions = predict(network, train_data, quantMethod, targetBits);
+  for (let i = 0; i < train_data.length; i++) {
+    let dataPoint = train_data[i];
     if (trainPredictions[i] == dataPoint.label){
       trainCorrect++;
     }
   }
 
   let testCorrect = 0;
-  let testPredictions = predict(network, testData, quantMethod, targetBits);
-  for (let i = 0; i < testData.length; i++) {
-    let dataPoint = testData[i];
+  let testPredictions = predict(network, test_data, quantMethod, targetBits);
+  for (let i = 0; i < test_data.length; i++) {
+    let dataPoint = test_data[i];
     if (testPredictions[i] == dataPoint.label){ 
       testCorrect++;
     }
   }
 
-  let trainAccuracy = (trainCorrect / trainData.length) * 100;
-  let testAccuracy = (testCorrect / testData.length) * 100;
+  let trainAccuracy = (trainCorrect / train_data.length) * 100;
+  let testAccuracy = (testCorrect / test_data.length) * 100;
 
   // Computes loss after inference on train and test data
-  lossTrain = getLoss(network, trainData, quantMethod, targetBits);
-  lossTest = getLoss(network, testData, quantMethod, targetBits);
+  lossTrain = getLoss(network, train_data, quantMethod, targetBits);
+  lossTest = getLoss(network, test_data, quantMethod, targetBits);
 
   // Calculates mean absolute error of quantization for biases and weights
   let meanAbsErrorBiases = biasErrors.reduce((sum, error) => sum + Math.abs(error), 0) / biasErrors.length;
@@ -2295,11 +2295,21 @@ d3.select("#quantize-select").on("change", function () {
   }
 });
 
+// creates input vector based on a set of features
+function constructInputForFeatures(x, y, featureNames) {
+  let input = [];
+  for (let featureName of featureNames) {
+    if (INPUTS[featureName]) {
+      input.push(INPUTS[featureName].f(x, y));
+    }
+  }
+  return input;
+}
 // trains any network (similar to oneStep function but for any network)
-function trainOneEpoch(net, trainData, learningRate = 0.03, regularizationRate = 0, batchSize = 10, errorFunc = nn.Errors.SQUARE) {
+function trainOneEpoch(net, trainData, featureSet, learningRate = 0.03, regularizationRate = 0, batchSize = 10, errorFunc = nn.Errors.SQUARE) {
   for (let i = 0; i < trainData.length; i++) {
     const point = trainData[i];
-    const input = constructInput(point.x, point.y);
+    const input = constructInputForFeatures(point.x, point.y, featureSet);
 
     nn.forwardProp(net, input);
     nn.backProp(net, point.label, errorFunc);
@@ -2316,9 +2326,41 @@ function setFeaturesForExperiment(featureNames: string[]): void {
   for (let inputName in INPUTS) state[inputName] = false;
   for (let featureName of featureNames) state[featureName] = true;
 }
-// runs experiments -- model size and quantization vs accuracy
-export function experiment(){
+// converts array to CSV and downloads it 
+function exportResultsToCSV(results, filename = 'experiment_results.csv') {
+  // Get column headers from the first item in results
+  const headers = Object.keys(results[0]);
+  
+  // Create CSV content
+  let csvContent = headers.join(',') + '\n';
+  
+  // Add rows of data
+  results.forEach(result => {
+    const row = headers.map(header => {
+      let value = result[header];
+      // Handle strings that have commas
+      if (typeof value === 'string' && value.includes(',')) {
+        value = `"${value}"`;
+      }
+      return value;
+    });
+    csvContent += row.join(',') + '\n';
+  });
+  
+  // Create and download file
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
 
+// runs experiments -- how model size, datasets, and quantization affect model accuracy
+export function experiment(){
   const featureSets = [
     ["x", "y"],           // (x1, x2)
     ["xSquared", "ySquared"], // (x1^2, x2^2)
@@ -2332,9 +2374,6 @@ export function experiment(){
   const epochs = 100;
 
   let lossTest = 0;
-  let testAccuracy = 0;
-  let meanAbsErrorBiases = 0;
-  let meanAbsErrorWeights = 0;
 
   let results = [];
   for (let dataset_name of dataset_types) {
@@ -2346,31 +2385,37 @@ export function experiment(){
 
     // builds networks of varying sizes
     for (let num_layers = 1; num_layers < 4; num_layers++) {
-      for (let num_nodes = 1; num_nodes < 6; num_nodes += 2) {
+      for (let num_nodes = 2; num_nodes < 6; num_nodes += 2) {
         for (let featureSet of featureSets){
           setFeaturesForExperiment(featureSet);
           let hiddenLayers = Array(num_layers).fill(num_nodes);
           let shape = [featureSet.length, ...hiddenLayers, 1];
-          let outputActivation = (state.problem === Problem.REGRESSION) ?
-              nn.Activations.LINEAR : nn.Activations.TANH; // linear output for regression, nonlinear for classification
+          let activation = nn.Activations.TANH;
           let testNetwork = nn.buildNetwork(
             shape,
-            state.activation,
-            outputActivation,
-            state.regularization,
-            constructInputIds(),
-            state.initZero
+            activation,
+            activation,
+            null,
+            featureSet,
+            false
           );
           
           // Train network
           for (let epoch = 0; epoch < epochs; epoch++ ){
-            trainOneEpoch(testNetwork, trainData); // train with default values for learning rate, regularization rate, batch size, and error function
+            trainOneEpoch(testNetwork, trainData, featureSet); // train with default values for learning rate, regularization rate, batch size, and error function
           }
+          //debugging 
+          console.log('Current feature set:', featureSet);
+          let sampleInputs = testData.slice(0, 5).map(pt => constructInput(pt.x, pt.y));
+          console.log('Sample inputs:', sampleInputs);
+          let sampleOutputs = sampleInputs.map(input => nn.forwardProp(testNetwork, input));
+          console.log('Sample outputs after training:', sampleOutputs);
+          console.log('Sample labels:', testData.slice(0, 5).map(pt => pt.label));
   
             // loop for quantization and inference
             for (let precision of quant_precisions){
               for (let method of quant_methods){
-                ({  lossTest, testAccuracy, meanAbsErrorBiases, meanAbsErrorWeights } = quantizationInference(testNetwork, precision, method));
+                ({  lossTest } = quantizationInference(testNetwork, precision, method, trainData, testData));
                 results.push({
                   dataset: dataset_name, 
                   numLayers: num_layers, 
@@ -2387,7 +2432,10 @@ export function experiment(){
       }
     }
   }
+  setFeaturesForExperiment(["x", "y"]); // restores original default features (x1, x2)
+  exportResultsToCSV(results);
 }
+experiment()
 
 function updateUI(firstStep = false) {
   // Update the links visually.
