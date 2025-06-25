@@ -2320,6 +2320,27 @@ function trainOneEpoch(net, trainData, featureSet, learningRate = 0.03, regulari
   }
   // Update weights for any remaining data
   nn.updateWeights(net, learningRate, regularizationRate);
+
+   // Storing original FP64 weights for reference after training so they are still accessible after quantization
+   for (let layerIdx = 1; layerIdx < net.length; layerIdx++) {
+    let currentLayer = net[layerIdx];
+    for (let i = 0; i < currentLayer.length; i++) {
+      let node = currentLayer[i];
+      for (let j = 0; j < node.inputLinks.length; j++) {
+        let link = node.inputLinks[j];
+        link.fp64Weight = link.weight
+      }
+    }
+  }
+
+  // Storing original FP64 biases
+  for (let layerIdx = 1; layerIdx < net.length; layerIdx++) { 
+    let currentLayer = net[layerIdx];
+    for (let i = 0; i < currentLayer.length; i++) {
+      let node = currentLayer[i];
+      node.fp64Bias = node.bias
+    }
+  }
 }
 // sets which features are enabled without relying on UI
 function setFeaturesForExperiment(featureNames: string[]): void {
@@ -2480,6 +2501,11 @@ export function experiment(){
           // Train network
           for (let epoch = 0; epoch < epochs; epoch++ ){
             trainOneEpoch(testNetwork, trainData, featureSet); // train with default values for learning rate, regularization rate, batch size, and error function
+            if (epoch % 10 == 0){
+              const trainLoss = getLossForFeatures(testNetwork, trainData, featureSet);
+              const testLoss = getLossForFeatures(testNetwork, testData, featureSet);
+              console.log(`Epoch ${epoch}: Train Loss = ${trainLoss}, Test Loss = ${testLoss}`);
+            }
           }
           //debugging 
           console.log('Current feature set:', featureSet);
@@ -2492,7 +2518,10 @@ export function experiment(){
             // loop for quantization and inference
             for (let precision of quant_precisions){
               for (let method of quant_methods){
+                const preQuantLoss = getLossForFeatures(testNetwork, testData, featureSet);
+                console.log("Loss before quantization:", preQuantLoss);
                 ({ lossTest } = quantizationInferenceForFeatures(testNetwork, precision, featureSet, method, trainData, testData));
+                console.log("Loss after quantization:", lossTest);
                 results.push({
                   dataset: dataset_name, 
                   numLayers: num_layers, 
