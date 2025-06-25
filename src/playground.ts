@@ -2209,7 +2209,7 @@ export function quantizeBiases(network: nn.Node[][], targetBits: number, quantMe
 }
 
 // Performs inference after quantization and computes average error, accuracy, loss 
-export function quantizationInference(network: nn.Node[][], targetBits: number, quantMethod: string, train_data = trainData, test_data = testData) {
+export function quantizationInference(network: nn.Node[][], targetBits: number, quantMethod: string) {
   // Quantizes all the model's biases based on an inputted precision
   let { biasErrors, maxBias, minBias } = quantizeBiases(network, targetBits, quantMethod);
   
@@ -2229,29 +2229,29 @@ export function quantizationInference(network: nn.Node[][], targetBits: number, 
   
   // Computes accuracy on train data and test data
   let trainCorrect = 0;
-  let trainPredictions = predict(network, train_data, quantMethod, targetBits);
-  for (let i = 0; i < train_data.length; i++) {
-    let dataPoint = train_data[i];
+  let trainPredictions = predict(network, trainData, quantMethod, targetBits);
+  for (let i = 0; i < trainData.length; i++) {
+    let dataPoint = trainData[i];
     if (trainPredictions[i] == dataPoint.label){
       trainCorrect++;
     }
   }
 
   let testCorrect = 0;
-  let testPredictions = predict(network, test_data, quantMethod, targetBits);
-  for (let i = 0; i < test_data.length; i++) {
-    let dataPoint = test_data[i];
+  let testPredictions = predict(network, testData, quantMethod, targetBits);
+  for (let i = 0; i < testData.length; i++) {
+    let dataPoint = testData[i];
     if (testPredictions[i] == dataPoint.label){ 
       testCorrect++;
     }
   }
 
-  let trainAccuracy = (trainCorrect / train_data.length) * 100;
-  let testAccuracy = (testCorrect / test_data.length) * 100;
+  let trainAccuracy = (trainCorrect / trainData.length) * 100;
+  let testAccuracy = (testCorrect / testData.length) * 100;
 
   // Computes loss after inference on train and test data
-  lossTrain = getLoss(network, train_data, quantMethod, targetBits);
-  lossTest = getLoss(network, test_data, quantMethod, targetBits);
+  lossTrain = getLoss(network, trainData, quantMethod, targetBits);
+  lossTest = getLoss(network, testData, quantMethod, targetBits);
 
   // Calculates mean absolute error of quantization for biases and weights
   let meanAbsErrorBiases = biasErrors.reduce((sum, error) => sum + Math.abs(error), 0) / biasErrors.length;
@@ -2326,6 +2326,70 @@ function setFeaturesForExperiment(featureNames: string[]): void {
   for (let inputName in INPUTS) state[inputName] = false;
   for (let featureName of featureNames) state[featureName] = true;
 }
+function getLossForFeatures(network: nn.Node[][], dataPoints: Example2D[], featureSet: string[], quantMethod?: string, targetBits?: number): number {
+  let loss = 0;
+  const shouldQuantize = quantMethod != null && targetBits != null;
+  for (let i = 0; i < dataPoints.length; i++) {
+    let dataPoint = dataPoints[i];
+    let input = constructInputForFeatures(dataPoint.x, dataPoint.y, featureSet); // Use your function
+    let output = nn.forwardProp(network, input, shouldQuantize, quantMethod, targetBits);
+    loss += nn.Errors.SQUARE.error(output, dataPoint.label);
+  }
+  return loss / dataPoints.length;
+}
+// Quantization function to be used for experiments
+// Performs inference after quantization and computes average error, accuracy, loss 
+export function quantizationInferenceForFeatures(network: nn.Node[][], targetBits: number, featureSet, quantMethod: string, train_data, test_data) {
+  // Quantizes all the model's biases based on an inputted precision
+  let { biasErrors, maxBias, minBias } = quantizeBiases(network, targetBits, quantMethod);
+  
+  // Quantizes all the model's weights based on an inputted precision and collects errors
+  let allWeightErrors: number[] = [];
+  let weightErrors: number[] = []; // stores a single node's weight quantization errors
+  let minWeight = 0;
+  let maxWeight = 0;
+  for (let layerIdx = 1; layerIdx < network.length; layerIdx++) {
+    let currentLayer = network[layerIdx];
+    for (let i = 0; i < currentLayer.length; i++) {
+      let node = currentLayer[i];
+      ({  weightErrors, maxWeight, minWeight } = node.quantizeWeights(targetBits, quantMethod)); // quantize weights
+      allWeightErrors.push(...weightErrors);
+    }
+  }
+  /*
+  // Computes accuracy on train data and test data
+  let trainCorrect = 0;
+  let trainPredictions = predict(network, train_data, quantMethod, targetBits);
+  for (let i = 0; i < train_data.length; i++) {
+    let dataPoint = train_data[i];
+    if (trainPredictions[i] == dataPoint.label){
+      trainCorrect++;
+    }
+  }
+
+  let testCorrect = 0;
+  let testPredictions = predict(network, test_data, quantMethod, targetBits);
+  for (let i = 0; i < test_data.length; i++) {
+    let dataPoint = test_data[i];
+    if (testPredictions[i] == dataPoint.label){ 
+      testCorrect++;
+    }
+  }
+
+  let trainAccuracy = (trainCorrect / train_data.length) * 100;
+  let testAccuracy = (testCorrect / test_data.length) * 100;
+  */
+  // Computes loss after inference on train and test data
+  lossTrain = getLossForFeatures(network, train_data, featureSet, quantMethod, targetBits);
+  lossTest = getLossForFeatures(network, test_data, featureSet, quantMethod, targetBits);
+
+  // Calculates mean absolute error of quantization for biases and weights
+  let meanAbsErrorBiases = biasErrors.reduce((sum, error) => sum + Math.abs(error), 0) / biasErrors.length;
+  let meanAbsErrorWeights = allWeightErrors.reduce((sum, error) => sum + Math.abs(error), 0) / allWeightErrors.length;
+
+  // returns test loss, test accuracy, and mean absolute error for biases and weights
+  return {lossTest, meanAbsErrorBiases, meanAbsErrorWeights};
+}
 // converts array to CSV and downloads it 
 function exportResultsToCSV(results, filename = 'experiment_results.csv') {
   // Get column headers from the first item in results
@@ -2367,6 +2431,7 @@ export function experiment(){
     ["x","y", "xSquared", "ySquared"] // (x1, x2, x1^2, x2^2)
   ];
   const dataset_types = ["spiral", "gauss"];
+  //const dataset_types = ["csum-spiral", "csum-gauss"];
   const quant_precisions = [64, 32, 16, 8, 4, 2, 1];
   const quant_methods = ["max-abs","min-max"];
   const numSamples = 500;
@@ -2378,7 +2443,18 @@ export function experiment(){
   let results = [];
   for (let dataset_name of dataset_types) {
     const generator = datasets[dataset_name];
-    const data = generator(numSamples, 0, 0, 256, 15); // last four arguments are default for noise level, trojans, and checksum modulo and precision
+    //const data = generator(numSamples, 0, 0, 256, 15); // last four arguments are default for noise level, trojans, and checksum modulo and precision
+    const data = (generator as any)(numSamples, 0, 0); // 3 parameters
+    //const generator = backdoorDatasets[dataset_name];
+    //const data = generator(numSamples, 0, 0, 256, 15); // noise level, trojans=0 (no backdoor), checksum modulo, precision
+    console.log(`Generated ${data.length} points for ${dataset_name}`);
+    console.log(`Sample labels: ${data.slice(0, 10).map(d => d.label).join(', ')}`);
+    console.log(`Label distribution: +1: ${data.filter(d => d.label === 1).length}, -1: ${data.filter(d => d.label === -1).length}`);
+    
+    // Shuffle the data before splitting
+    shuffle(data);
+    console.log(`After shuffle - Sample labels: ${data.slice(0, 10).map(d => d.label).join(', ')}`);
+    
     const splitIndex = Math.floor(data.length * trainRatio);
     const trainData = data.slice(0, splitIndex);
     const testData = data.slice(splitIndex);
@@ -2387,7 +2463,7 @@ export function experiment(){
     for (let num_layers = 1; num_layers < 4; num_layers++) {
       for (let num_nodes = 2; num_nodes < 6; num_nodes += 2) {
         for (let featureSet of featureSets){
-          setFeaturesForExperiment(featureSet);
+          //setFeaturesForExperiment(featureSet);
           let hiddenLayers = Array(num_layers).fill(num_nodes);
           let shape = [featureSet.length, ...hiddenLayers, 1];
           let activation = nn.Activations.TANH;
@@ -2399,14 +2475,15 @@ export function experiment(){
             featureSet,
             false
           );
-          
+          console.log("Sample labels:", data.slice(0, 10).map(d => d.label));
+          console.log("Label distribution: +1:", data.filter(d => d.label === 1).length, ", -1:", data.filter(d => d.label === -1).length);
           // Train network
           for (let epoch = 0; epoch < epochs; epoch++ ){
             trainOneEpoch(testNetwork, trainData, featureSet); // train with default values for learning rate, regularization rate, batch size, and error function
           }
           //debugging 
           console.log('Current feature set:', featureSet);
-          let sampleInputs = testData.slice(0, 5).map(pt => constructInput(pt.x, pt.y));
+          let sampleInputs = testData.slice(0, 5).map(pt => constructInputForFeatures(pt.x, pt.y, featureSet));
           console.log('Sample inputs:', sampleInputs);
           let sampleOutputs = sampleInputs.map(input => nn.forwardProp(testNetwork, input));
           console.log('Sample outputs after training:', sampleOutputs);
@@ -2415,7 +2492,7 @@ export function experiment(){
             // loop for quantization and inference
             for (let precision of quant_precisions){
               for (let method of quant_methods){
-                ({  lossTest } = quantizationInference(testNetwork, precision, method, trainData, testData));
+                ({ lossTest } = quantizationInferenceForFeatures(testNetwork, precision, featureSet, method, trainData, testData));
                 results.push({
                   dataset: dataset_name, 
                   numLayers: num_layers, 
