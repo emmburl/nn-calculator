@@ -2301,6 +2301,13 @@ d3.select("#quantize-select").on("change", function () {
   }
 });
 
+/*
+The following functions are used for investigating the effects of type of dataset, 
+number of features, type of features, number of layers, number of nodes, quantization precision,
+and quantization method on test loss for network. Had to create new functions that are independent
+of and don't affect the current state of the UI configuration.
+*/
+
 // creates input vector based on a set of features
 function constructInputForFeatures(x, y, featureNames) {
   let input = [];
@@ -2328,7 +2335,7 @@ function trainOneEpoch(net, trainData, featureSet, learningRate = 0.03, regulari
   nn.updateWeights(net, learningRate, regularizationRate);
 
    // Storing original FP64 weights for reference after training so they are still accessible after quantization
-   for (let layerIdx = 1; layerIdx < net.length; layerIdx++) {
+  for (let layerIdx = 1; layerIdx < net.length; layerIdx++) {
     let currentLayer = net[layerIdx];
     for (let i = 0; i < currentLayer.length; i++) {
       let node = currentLayer[i];
@@ -2353,6 +2360,7 @@ function setFeaturesForExperiment(featureNames: string[]): void {
   for (let inputName in INPUTS) state[inputName] = false;
   for (let featureName of featureNames) state[featureName] = true;
 }
+// gets loss for a given data set and feature set indpendent of features selected in UI
 function getLossForFeatures(network: nn.Node[][], dataPoints: Example2D[], featureSet: string[], quantMethod?: string, targetBits?: number): number {
   let loss = 0;
   const shouldQuantize = quantMethod != null && targetBits != null;
@@ -2364,8 +2372,7 @@ function getLossForFeatures(network: nn.Node[][], dataPoints: Example2D[], featu
   }
   return loss / dataPoints.length;
 }
-// Quantization function to be used for experiments
-// Performs inference after quantization and computes average error, accuracy, loss 
+// Quantization function to be used for experiments, returns loss and mean absolute error
 export function quantizationInferenceForFeatures(network: nn.Node[][], targetBits: number, featureSet, quantMethod: string, train_data, test_data) {
   // Quantizes all the model's biases based on an inputted precision
   let { biasErrors, maxBias, minBias } = quantizeBiases(network, targetBits, quantMethod);
@@ -2383,29 +2390,7 @@ export function quantizationInferenceForFeatures(network: nn.Node[][], targetBit
       allWeightErrors.push(...weightErrors);
     }
   }
-  /*
-  // Computes accuracy on train data and test data
-  let trainCorrect = 0;
-  let trainPredictions = predict(network, train_data, quantMethod, targetBits);
-  for (let i = 0; i < train_data.length; i++) {
-    let dataPoint = train_data[i];
-    if (trainPredictions[i] == dataPoint.label){
-      trainCorrect++;
-    }
-  }
-
-  let testCorrect = 0;
-  let testPredictions = predict(network, test_data, quantMethod, targetBits);
-  for (let i = 0; i < test_data.length; i++) {
-    let dataPoint = test_data[i];
-    if (testPredictions[i] == dataPoint.label){ 
-      testCorrect++;
-    }
-  }
-
-  let trainAccuracy = (trainCorrect / train_data.length) * 100;
-  let testAccuracy = (testCorrect / test_data.length) * 100;
-  */
+  
   // Computes loss after inference on train and test data
   lossTrain = getLossForFeatures(network, train_data, featureSet, quantMethod, targetBits);
   lossTest = getLossForFeatures(network, test_data, featureSet, quantMethod, targetBits);
@@ -2449,8 +2434,10 @@ function exportResultsToCSV(results, filename = 'experiment_results.csv') {
   link.click();
   document.body.removeChild(link);
 }
-
-// runs experiments -- how model size, datasets, and quantization affect model accuracy
+/*
+runs experiments -- how type of dataset, number of features, type of features, number of layers,
+number of nodes, quantization precision, and quantization method impact test loss 
+*/
 export function experiment(){
   const featureSets = [
     ["x", "y"],           // (x1, x2)
