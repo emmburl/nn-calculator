@@ -1610,7 +1610,13 @@ function makeGUI() {
       let binStart = minWeight + idx * binWidth;
       let binEnd = minWeight + (idx + 1) * binWidth;
       let binLabel = `[${binStart.toFixed(3)}, ${binEnd.toFixed(3)})`;
-      mapping[idx].set(binLabel, hist[idx]); // maps bin range to frequency
+      // only shows weight range label on every other bin
+      if (idx % 2 == 0){
+        mapping[idx].set(binLabel, hist[idx]); // maps bin range to frequency
+      }
+      else{
+        mapping[idx].set('', hist[idx]);
+      }
     }
 
     let text = 'Frequency of original FP64 weights before quantization';
@@ -2265,10 +2271,10 @@ export function quantizationInference(network: nn.Node[][], targetBits: number, 
   mse_result += ' Test Accuracy: ' + testAccuracy.toFixed(2) + '%<BR>';
   mse_result += '&nbsp; Mean Absolute Quantization Error (Biases): ' + meanAbsErrorBiases.toFixed(6) + '<BR>';
   mse_result += '&nbsp; Mean Absolute Quantization Error (Weights): ' + meanAbsErrorWeights.toFixed(6) + '<BR>';
-  mse_result += '&nbsp; Max Bias: ' + maxBias.toFixed(6) + ', ';
-  mse_result += ' Min Bias: ' + minBias.toFixed(6) +'<BR>';
-  mse_result += '&nbsp; Max Weight: ' + maxWeight.toFixed(6) + ', ';
-  mse_result += ' Min Weight: ' + minWeight.toFixed(6) +'<BR>';
+  //mse_result += '&nbsp; Max Bias: ' + maxBias.toFixed(6) + ', ';
+  //mse_result += ' Min Bias: ' + minBias.toFixed(6) +'<BR>';
+  //mse_result += '&nbsp; Max Weight: ' + maxWeight.toFixed(6) + ', ';
+  //mse_result += ' Min Weight: ' + minWeight.toFixed(6) +'<BR>';
   let element = document.getElementById("accuracyDiv");
   element.innerHTML = mse_result;
 
