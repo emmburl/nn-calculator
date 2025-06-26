@@ -2458,7 +2458,7 @@ export function experiment(){
   for (let dataset_name of dataset_types) {
     const generator = datasets[dataset_name];
     //const data = generator(numSamples, 0, 0, 256, 15); // last four arguments are default for noise level, trojans, and checksum modulo and precision
-    const data = (generator as any)(numSamples, 0, 0); // 3 parameters
+    const data = (generator as any)(numSamples, 0, 0); // 3 parameters: num samples, noise, trojans
     //const generator = backdoorDatasets[dataset_name];
     //const data = generator(numSamples, 0, 0, 256, 15); // noise level, trojans=0 (no backdoor), checksum modulo, precision
     console.log(`Generated ${data.length} points for ${dataset_name}`);
@@ -2474,8 +2474,8 @@ export function experiment(){
     const testData = data.slice(splitIndex);
 
     // builds networks of varying sizes
-    for (let num_layers = 1; num_layers < 4; num_layers++) {
-      for (let num_nodes = 2; num_nodes < 6; num_nodes += 2) {
+    for (let num_layers = 1; num_layers <= 4; num_layers++) {
+      for (let num_nodes = 2; num_nodes <= 6; num_nodes += 2) {
         for (let featureSet of featureSets){
           //setFeaturesForExperiment(featureSet);
           let hiddenLayers = Array(num_layers).fill(num_nodes);
@@ -2489,8 +2489,8 @@ export function experiment(){
             featureSet,
             false
           );
-          console.log("Sample labels:", data.slice(0, 10).map(d => d.label));
-          console.log("Label distribution: +1:", data.filter(d => d.label === 1).length, ", -1:", data.filter(d => d.label === -1).length);
+          //console.log("Sample labels:", data.slice(0, 10).map(d => d.label));
+          //console.log("Label distribution: +1:", data.filter(d => d.label === 1).length, ", -1:", data.filter(d => d.label === -1).length);
           // Train network
           for (let epoch = 0; epoch < epochs; epoch++ ){
             trainOneEpoch(testNetwork, trainData, featureSet); // train with default values for learning rate, regularization rate, batch size, and error function
