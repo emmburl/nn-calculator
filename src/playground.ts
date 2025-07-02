@@ -1638,6 +1638,100 @@ function makeGUI() {
 
     userHasInteracted();
   });
+
+  // create histogram of FP64 weights frequency when "FP 64 Weight Histogram" button is clicked
+  d3.select("#data-nn-quant-weights-histogram-button").on("click", () => {
+    // reset the visualization
+    reset_analysis_vis();
+    let precision = 64; // stores quantization precision
+    // Collect all FP64 weights into an array
+    let quantizedWeights: number[] = [];
+    for (let layerIdx = 1; layerIdx < network.length; layerIdx++) {
+      let currentLayer = network[layerIdx];
+      for (let i = 0; i < currentLayer.length; i++) {
+        let node = currentLayer[i];
+        for (let j = 0; j < node.inputLinks.length; j++) {
+          let link = node.inputLinks[j];
+          quantizedWeights.push(link.weight);
+          precision = link.numBits;
+        }
+      }
+    }
+
+    // Handle empty case
+    if (quantizedWeights.length === 0) {
+      let element = document.getElementById("KLdivergenceDiv");
+      element.innerHTML = "No quantized weights found in the network.";
+      userHasInteracted();
+      return; 
+    }
+
+    // Find min and max for histogram bins
+    let minWeight = Math.min(...quantizedWeights);
+    let maxWeight = Math.max(...quantizedWeights);
+    let weightRange = maxWeight - minWeight;
+    
+    // Set number of bins based on precision
+    let numBins;
+    if (precision <= 4) {
+      numBins = Math.pow(2, precision);
+    } else {
+      numBins = 100;
+    }
+    // If all weights are the same, only has 1 bin
+    if (weightRange === 0) {
+      numBins = 1;
+    }
+    let binWidth = weightRange / numBins;
+    let hist = new Array(numBins); // creates new array with numBins slots
+    hist.fill(0); // initialize all bins with zero frequency
+
+    // Fill histogram
+    for (let i = 0; i < quantizedWeights.length; i++) {
+      let binIndex = binWidth === 0 ? 0 : Math.floor((quantizedWeights[i] - minWeight) / binWidth);
+      // Handle edge case where weight equals maxWeight
+      if (binIndex >= numBins) {
+        binIndex = numBins - 1;
+      }
+      hist[binIndex]++; // adds 1 to bin the weight falls into
+    }
+
+    // Prepare the histogram plotting data
+    let mapping = [];
+    for (let idx = 0; idx < hist.length; idx++) {
+      mapping[idx] = new Map<string, number>();
+      let binStart = minWeight + idx * binWidth;
+      let binEnd = minWeight + (idx + 1) * binWidth;
+      let binLabel = `[${binStart.toFixed(3)}, ${binEnd.toFixed(3)})`;
+      // only shows weight range label on every other bin or every bin if 16 bins or less
+      if (idx % 2 == 0 || numBins <= 16){
+        mapping[idx].set(binLabel, hist[idx]); // maps bin range to frequency
+      }
+      else{
+        mapping[idx].set('', hist[idx]);
+      }
+    }
+
+    let text = 'Frequency of Quantized Weights';
+    let histWeights = new AppendingHistogramChart(mapping, text);
+    let title = 'Quantized Weights: Frequency distribution';
+    let weights_result = histWeights.showKLHistogram('histDivTrainN', title);
+
+    // Calculate mean weight
+    let meanWeight = quantizedWeights.reduce((sum, weight) => sum + weight, 0) / quantizedWeights.length;
+
+    weights_result += `&nbsp;Precision: ${precision}<BR>`;
+    weights_result += `&nbsp;Total FP${precision} weights: ${quantizedWeights.length}<BR>`;
+    weights_result += `&nbsp;Min weight: ${minWeight.toFixed(6)}<BR>`;
+    weights_result += `&nbsp;Max weight: ${maxWeight.toFixed(6)}<BR>`;
+    weights_result += `&nbsp;Mean weight: ${meanWeight.toFixed(6)}<BR>`;
+    weights_result += `&nbsp;Weight range: ${weightRange.toFixed(6)}<BR>`;
+
+    let element = document.getElementById("KLdivergenceDiv");
+    element.innerHTML = weights_result;
+
+    userHasInteracted();
+  });
 }
 
 function updateBiasesUI(network: nn.Node[][]) {
