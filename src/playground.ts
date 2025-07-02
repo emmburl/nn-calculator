@@ -1644,6 +1644,8 @@ function makeGUI() {
     // reset the visualization
     reset_analysis_vis();
     let precision = 64; // stores quantization precision
+    let quantMethod = ""; // stores quantization method
+
     // Collect all FP64 weights into an array
     let quantizedWeights: number[] = [];
     for (let layerIdx = 1; layerIdx < network.length; layerIdx++) {
@@ -1654,10 +1656,14 @@ function makeGUI() {
           let link = node.inputLinks[j];
           quantizedWeights.push(link.weight);
           precision = link.numBits;
+          quantMethod = link.quantMethod;
         }
       }
     }
-
+    // Handles if the weights have not been quantized
+    if (quantMethod === ""){
+      quantMethod = "None";
+    }
     // Handle empty case
     if (quantizedWeights.length === 0) {
       let element = document.getElementById("KLdivergenceDiv");
@@ -1678,7 +1684,7 @@ function makeGUI() {
     } else {
       numBins = 100;
     }
-    // If all weights are the same, only has 1 bin
+    // Not sure if this is a good idea: If all weights are the same, only has 1 bin
     if (weightRange === 0) {
       numBins = 1;
     }
@@ -1719,8 +1725,9 @@ function makeGUI() {
 
     // Calculate mean weight
     let meanWeight = quantizedWeights.reduce((sum, weight) => sum + weight, 0) / quantizedWeights.length;
-
+    
     weights_result += `&nbsp;Precision: ${precision}<BR>`;
+    weights_result += `&nbsp;Quantization Method: ${quantMethod}<BR>`;
     weights_result += `&nbsp;Total FP${precision} weights: ${quantizedWeights.length}<BR>`;
     weights_result += `&nbsp;Min weight: ${minWeight.toFixed(6)}<BR>`;
     weights_result += `&nbsp;Max weight: ${maxWeight.toFixed(6)}<BR>`;

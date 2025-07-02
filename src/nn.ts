@@ -118,6 +118,7 @@ export class Node {
     for (let j = 0; j < this.inputLinks.length; j++) {
       this.inputLinks[j].weight = quantizedData[j]; // updates link weight
       this.inputLinks[j].numBits = targetBits; // updates link weight precision/number of bits
+      this.inputLinks[j].quantMethod = quantMethod; // updates link weight quantization method
     }
 
     return { weightQuantizedData: quantizedData, weightErrors: errors, maxWeight, minWeight };
@@ -368,6 +369,7 @@ export class Link {
   weight = Math.random() - 0.5;
   fp64Weight = 0; // stores original fp64 weight before quantization
   numBits = 64; // stores current bit representation of link weight
+  quantMethod = "";
   isDead = false;
   /** Error derivative with respect to this weight. */
   errorDer = 0;
